@@ -1,0 +1,390 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>DespachoPharma | Catálogo</title>
+
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+
+  <style>
+    :root{
+      --bg:#f8fafc; --card:#fff; --border:#e2e8f0; --text:#0f172a;
+    }
+    body{ background:var(--bg); color:var(--text); }
+    .app-card{
+      background:var(--card); border:1px solid var(--border); border-radius:16px;
+      box-shadow: 0 6px 20px rgba(15,23,42,.06);
+    }
+    .brand-dot{ width:10px;height:10px;border-radius:999px;background:#3b82f6;display:inline-block;margin-right:8px; }
+    .mono{ font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono","Courier New", monospace; }
+    .table td,.table th{ vertical-align:middle; }
+  </style>
+</head>
+
+<body>
+  <nav class="navbar bg-white border-bottom">
+    <div class="container">
+      <a class="navbar-brand d-flex align-items-center" href="history.html">
+        <span class="brand-dot"></span>
+        <span class="fw-semibold">DespachoPharma</span>
+      </a>
+
+      <div class="ms-auto d-flex align-items-center gap-2">
+        <a class="btn btn-outline-secondary btn-sm" href="history.html">Histórico</a>
+        <span class="badge text-bg-light border">
+          <span class="text-muted">Admin:</span> <span id="nav_user" class="ms-1 fw-semibold">—</span>
+        </span>
+        <button id="btn_logout" class="btn btn-outline-secondary btn-sm">Salir</button>
+      </div>
+    </div>
+  </nav>
+
+  <main class="container py-4">
+    <div class="row g-3">
+      <div class="col-12 col-lg-4">
+        <div class="app-card p-3">
+          <div class="fw-semibold">Buscar</div>
+          <div class="text-muted small">Por nombre o barcode.</div>
+
+          <div id="alert_search" class="alert alert-danger d-none mt-3 mb-0"></div>
+
+          <div class="mt-3">
+            <label class="form-label" for="q">Consulta</label>
+            <input id="q" class="form-control" placeholder="Ej: Metformina / 750123..." />
+          </div>
+
+          <div class="mt-3">
+            <label class="form-label" for="active_filter">Estado</label>
+            <select id="active_filter" class="form-select">
+              <option value="all" selected>Todos</option>
+              <option value="true">Activos</option>
+              <option value="false">Inactivos</option>
+            </select>
+          </div>
+
+          <div class="d-grid gap-2 mt-3">
+            <button id="btn_search" class="btn btn-primary">
+              <span id="btn_search_text">Buscar</span>
+              <span id="btn_search_spinner" class="spinner-border spinner-border-sm ms-2 d-none"></span>
+            </button>
+            <button id="btn_new" class="btn btn-success">Nuevo producto</button>
+          </div>
+
+          <hr class="my-4">
+          <div class="small text-muted">Sesión: se cierra tras 30 min sin uso.</div>
+        </div>
+      </div>
+
+      <div class="col-12 col-lg-8">
+        <div class="app-card p-3">
+          <div class="d-flex justify-content-between align-items-start">
+            <div>
+              <div class="fw-semibold">Catálogo</div>
+              <div class="text-muted small">Administra productos por código de barras.</div>
+            </div>
+            <div class="text-end">
+              <div class="text-muted small">Total</div>
+              <div class="fw-semibold"><span id="count">0</span></div>
+            </div>
+          </div>
+
+          <div id="alert_table" class="alert alert-danger d-none mt-3 mb-0"></div>
+
+          <div class="table-responsive mt-3">
+            <table class="table table-sm">
+              <thead class="table-light">
+                <tr>
+                  <th style="width:30%">Barcode</th>
+                  <th style="width:45%">Producto</th>
+                  <th style="width:10%">Estado</th>
+                  <th style="width:15%" class="text-end">Acción</th>
+                </tr>
+              </thead>
+              <tbody id="tbody">
+                <tr><td colspan="4" class="text-center text-muted py-4">Busca para ver resultados.</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Modal: Upsert -->
+  <div class="modal fade" id="modal_upsert" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Producto</h5>
+          <button class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+        </div>
+        <div class="modal-body">
+          <div id="alert_modal" class="alert alert-danger d-none"></div>
+
+          <div class="mb-3">
+            <label class="form-label" for="m_barcode">Barcode</label>
+            <input id="m_barcode" class="form-control mono" placeholder="Ej: 7501234567890" />
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label" for="m_name">Nombre del producto</label>
+            <input id="m_name" class="form-control" placeholder="Ej: Metformina 850mg" />
+          </div>
+
+          <div class="form-check">
+            <input id="m_active" class="form-check-input" type="checkbox" checked />
+            <label class="form-check-label" for="m_active">Activo</label>
+          </div>
+
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+          <button id="btn_save" class="btn btn-primary">
+            <span id="btn_save_text">Guardar</span>
+            <span id="btn_save_spinner" class="spinner-border spinner-border-sm ms-2 d-none"></span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+
+  <script>
+    const SUPABASE_URL = "https://rewdmcyqxyzcoeiikoow.supabase.co";
+    const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJld2RtY3lxeHl6Y29laWlrb293Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEwMDcxMDMsImV4cCI6MjA4NjU4MzEwM30.vRkCRFYez3zeL67Ik_niDrPu9wGt53gEqE6LLf_SUHE";
+    const ROUTES = { login:"index.html", history:"history.html", dispatch:"dispatch.html", cashier:"cashier.html" };
+
+    const el = (id) => document.getElementById(id);
+    const IDLE_MS = 30 * 60 * 1000;
+
+    function showAlert(id,msg){ const a=el(id); a.textContent=msg; a.classList.remove("d-none"); }
+    function hideAlert(id){ const a=el(id); a.textContent=""; a.classList.add("d-none"); }
+    function setLastActivity(){ localStorage.setItem("dp_last_activity", new Date().toISOString()); }
+    function getSession(){
+      return { token: localStorage.getItem("dp_session_token")||"", role:(localStorage.getItem("dp_role")||"").toLowerCase(), name: localStorage.getItem("dp_display_name")||"" };
+    }
+    function esc(s){ return String(s??"").replace(/[&<>"']/g,m=>({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;" }[m])); }
+    function btnLoad(btnId, textId, spinId, on, tOn, tOff){
+      el(btnId).disabled = on;
+      el(spinId).classList.toggle("d-none", !on);
+      el(textId).textContent = on ? tOn : tOff;
+    }
+
+    async function callRpc(fn, body){
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/${fn}`, {
+        method:"POST",
+        headers:{
+          "Content-Type":"application/json",
+          "apikey": SUPABASE_ANON_KEY,
+          "Authorization": `Bearer ${SUPABASE_ANON_KEY}`
+        },
+        body: JSON.stringify(body||{})
+      });
+      const text = await res.text();
+      let data=null; try{ data = text ? JSON.parse(text) : null; }catch{ data=null; }
+      if(!res.ok){
+        const msg = (data && (data.message||data.error||data.details)) ? (data.message||data.error||data.details) : "Error Supabase.";
+        throw new Error(msg);
+      }
+      return data;
+    }
+
+    let lastTouchAt = 0;
+    async function touchSession(force=false){
+      const now = Date.now();
+      if(!force && (now-lastTouchAt)<60_000) return true;
+      lastTouchAt = now;
+      const s = getSession();
+      if(!s.token) return false;
+      const rows = await callRpc("rpc_session_touch",{ p_session_token:s.token });
+      return Array.isArray(rows) && rows.length>0;
+    }
+
+    async function logoutAndGoLogin(){
+      try{
+        const s=getSession();
+        if(s.token) await callRpc("rpc_logout",{ p_session_token:s.token });
+      }catch(_){}
+      ["dp_session_token","dp_role","dp_display_name","dp_user_id","dp_expires_at","dp_last_activity"].forEach(k=>localStorage.removeItem(k));
+      window.location.href = ROUTES.login;
+    }
+
+    function startIdleWatcher(){
+      setInterval(async ()=>{
+        const last = localStorage.getItem("dp_last_activity");
+        if(!last) return;
+        if(Date.now() - new Date(last).getTime() > IDLE_MS){
+          alert("Sesión cerrada por inactividad (30 min).");
+          await logoutAndGoLogin();
+        }
+      }, 30_000);
+    }
+
+    function statusBadge(active){
+      return active ? `<span class="badge text-bg-success">Activo</span>` : `<span class="badge text-bg-secondary">Inactivo</span>`;
+    }
+
+    let currentRows = [];
+    function render(rows){
+      currentRows = rows;
+      el("count").textContent = String(rows.length);
+      const tb = el("tbody");
+      tb.innerHTML = "";
+      if(!rows.length){
+        tb.innerHTML = `<tr><td colspan="4" class="text-center text-muted py-4">Sin resultados.</td></tr>`;
+        return;
+      }
+      rows.forEach(r=>{
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td class="mono">${esc(r.barcode||"")}</td>
+          <td class="fw-semibold">${esc(r.product_name||"")}</td>
+          <td>${statusBadge(!!r.active)}</td>
+          <td class="text-end">
+            <button class="btn btn-outline-primary btn-sm" data-act="edit" data-bc="${esc(r.barcode)}">Editar</button>
+            <button class="btn btn-outline-secondary btn-sm ms-1" data-act="toggle" data-bc="${esc(r.barcode)}" data-active="${r.active ? "true":"false"}">
+              ${r.active ? "Desactivar" : "Activar"}
+            </button>
+          </td>
+        `;
+        tb.appendChild(tr);
+      });
+
+      tb.querySelectorAll('button[data-act="edit"]').forEach(b=>{
+        b.addEventListener("click",()=>openEdit(b.getAttribute("data-bc")));
+      });
+      tb.querySelectorAll('button[data-act="toggle"]').forEach(b=>{
+        b.addEventListener("click",()=>toggleActive(b.getAttribute("data-bc"), b.getAttribute("data-active")==="true"));
+      });
+    }
+
+    function openNew(){
+      hideAlert("alert_modal");
+      el("m_barcode").value = "";
+      el("m_name").value = "";
+      el("m_active").checked = true;
+      el("m_barcode").disabled = false;
+      bootstrap.Modal.getOrCreateInstance(el("modal_upsert")).show();
+      setTimeout(()=>el("m_barcode").focus(), 150);
+    }
+
+    function openEdit(barcode){
+      const row = currentRows.find(x=>String(x.barcode)===String(barcode));
+      if(!row) return;
+      hideAlert("alert_modal");
+      el("m_barcode").value = row.barcode || "";
+      el("m_name").value = row.product_name || "";
+      el("m_active").checked = !!row.active;
+      el("m_barcode").disabled = true; // no cambiamos barcode en edit (MVP)
+      bootstrap.Modal.getOrCreateInstance(el("modal_upsert")).show();
+      setTimeout(()=>el("m_name").focus(), 150);
+    }
+
+    async function doSearch(){
+      hideAlert("alert_search"); hideAlert("alert_table");
+      const ok = await touchSession(true);
+      if(!ok) return logoutAndGoLogin();
+
+      const s = getSession();
+      const q = (el("q").value||"").trim() || null;
+      const af = el("active_filter").value;
+      const p_active = (af==="all") ? null : (af==="true");
+
+      const rows = await callRpc("rpc_catalog_search", {
+        p_session_token: s.token,
+        p_q: q,
+        p_barcode: null,
+        p_active: (af==="all") ? null : (af==="true"),
+        p_limit: 200,
+        p_offset: 0
+      });
+
+      render(Array.isArray(rows) ? rows : []);
+    }
+
+    async function saveProduct(){
+      hideAlert("alert_modal");
+      const ok = await touchSession(true);
+      if(!ok) return logoutAndGoLogin();
+
+      const s = getSession();
+      const bc = (el("m_barcode").value||"").trim();
+      const nm = (el("m_name").value||"").trim();
+      const ac = !!el("m_active").checked;
+
+      if(!bc) return showAlert("alert_modal","Barcode requerido.");
+      if(!nm) return showAlert("alert_modal","Nombre requerido.");
+
+      try{
+        btnLoad("btn_save","btn_save_text","btn_save_spinner", true, "Guardando…", "Guardar");
+        await callRpc("rpc_catalog_upsert", { p_session_token:s.token, p_barcode:bc, p_product_name:nm, p_active:ac });
+        bootstrap.Modal.getOrCreateInstance(el("modal_upsert")).hide();
+        await doSearch();
+      } catch(err){
+        showAlert("alert_modal", err.message || "No se pudo guardar.");
+      } finally {
+        btnLoad("btn_save","btn_save_text","btn_save_spinner", false, "Guardando…", "Guardar");
+      }
+    }
+
+    async function toggleActive(barcode, isActive){
+      hideAlert("alert_table");
+      const ok = await touchSession(true);
+      if(!ok) return logoutAndGoLogin();
+      const s = getSession();
+
+      const next = !isActive;
+      if(!confirm(`${next ? "Activar" : "Desactivar"} producto ${barcode}?`)) return;
+
+      try{
+        await callRpc("rpc_catalog_set_active", { p_session_token:s.token, p_barcode:barcode, p_active:next });
+        await doSearch();
+      } catch(err){
+        showAlert("alert_table", err.message || "No se pudo cambiar estado.");
+      }
+    }
+
+    (async function init(){
+      const s = getSession();
+      if(!s.token) return window.location.href = ROUTES.login;
+      if(s.role !== "admin"){
+        if(s.role==="dispatch") return window.location.href = ROUTES.dispatch;
+        if(s.role==="cashier") return window.location.href = ROUTES.cashier;
+        return window.location.href = ROUTES.login;
+      }
+
+      el("nav_user").textContent = s.name || "—";
+      setLastActivity();
+      ["mousemove","mousedown","keydown","touchstart","wheel"].forEach(ev=>window.addEventListener(ev,()=>setLastActivity(),{passive:true}));
+      startIdleWatcher();
+
+      el("btn_logout").addEventListener("click", async ()=>{
+        if(!confirm("¿Cerrar sesión?")) return;
+        await logoutAndGoLogin();
+      });
+
+      el("btn_search").addEventListener("click", async ()=>{
+        try{
+          btnLoad("btn_search","btn_search_text","btn_search_spinner", true, "Buscando…", "Buscar");
+          await doSearch();
+        } catch(err){
+          showAlert("alert_search", err.message || "No se pudo buscar.");
+        } finally {
+          btnLoad("btn_search","btn_search_text","btn_search_spinner", false, "Buscando…", "Buscar");
+        }
+      });
+
+      el("q").addEventListener("keydown",(e)=>{ if(e.key==="Enter"){ e.preventDefault(); el("btn_search").click(); } });
+
+      el("btn_new").addEventListener("click", openNew);
+      el("btn_save").addEventListener("click", saveProduct);
+
+      // carga inicial (opcional)
+      await doSearch();
+    })();
+  </script>
+</body>
+</html>
