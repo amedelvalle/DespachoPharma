@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>DespachoPharma | Ingreso</title>
+
+  <!-- Bootstrap 5 -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+
+  <style>
+    :root{
+      --bg:#f8fafc;
+      --card:#ffffff;
+      --border:#e2e8f0;
+      --text:#0f172a;
+      --muted:#64748b;
+    }
+    body{ background:var(--bg); color:var(--text); }
+    .app-card{
+      background:var(--card);
+      border:1px solid var(--border);
+      border-radius:16px;
+      box-shadow: 0 6px 20px rgba(15,23,42,.06);
+    }
+    .brand-dot{
+      width:10px;height:10px;border-radius:999px;background:#3b82f6;display:inline-block;margin-right:8px;
+    }
+    .pin-input{
+      font-size:1.35rem;
+      letter-spacing:.35rem;
+      text-align:center;
+    }
+  </style>
+</head>
+
+<body class="min-vh-100 d-flex align-items-center">
+  <main class="container py-4">
+    <div class="row justify-content-center">
+      <div class="col-12 col-sm-10 col-md-6 col-lg-4">
+        <div class="app-card p-4">
+          <div class="mb-3">
+            <div class="d-flex align-items-center mb-1">
+              <span class="brand-dot"></span>
+              <h1 class="h5 mb-0">DespachoPharma</h1>
+            </div>
+            <div class="text-muted small">Ingreso por PIN (4 dígitos)</div>
+          </div>
+
+          <div id="alert_login" class="alert alert-danger d-none" role="alert"></div>
+
+          <form id="loginForm" autocomplete="off">
+            <div class="mb-3">
+              <label for="pin_input" class="form-label">PIN</label>
+              <input
+                id="pin_input"
+                class="form-control pin-input"
+                type="password"
+                inputmode="numeric"
+                maxlength="4"
+                placeholder="••••"
+                aria-label="PIN de 4 dígitos"
+                required
+              />
+              <div class="form-text">Si no tienes PIN, solicítalo al administrador.</div>
+            </div>
+
+            <div class="d-grid gap-2">
+              <button id="btn_login" type="submit" class="btn btn-primary">
+                <span id="btn_login_text">Ingresar</span>
+                <span id="btn_login_spinner" class="spinner-border spinner-border-sm ms-2 d-none" aria-hidden="true"></span>
+              </button>
+              <button id="btn_clear" type="button" class="btn btn-outline-secondary">Limpiar</button>
+            </div>
+          </form>
+
+          <hr class="my-4">
+
+          <div class="small text-muted">
+            <div class="d-flex justify-content-between">
+              <span>Sesión:</span>
+              <span>Se cerrará tras 30 min sin uso</span>
+            </div>
+          </div>
+
+        </div>
+
+        <div class="text-center mt-3 small text-muted">
+          CCM • Control de despachos y validación
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    /***********************
+     * CONFIG (RELLENAR)
+     ***********************/
+    const SUPABASE_URL = "https://rewdmcyqxyzcoeiikoow.supabase.co"; // <- pega aquí
+    const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJld2RtY3lxeHl6Y29laWlrb293Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEwMDcxMDMsImV4cCI6MjA4NjU4MzEwM30.vRkCRFYez3zeL67Ik_niDrPu9wGt53gEqE6LLf_SUHE";                // <- pega aquí
+
+    // Rutas (ajusta si usas subcarpeta en GitHub Pages)
+    const ROUTES = {
+      dispatch: "dispatch.html",
+      cashier: "cashier.html",
+      admin: "history.html" // o admin.html cuando exista
+    };
+
+    /***********************
+     * UTILIDADES
+     ***********************/
+    const el = (id) => document.getElementById(id);
+
+    function showAlert(msg){
+      const a = el("alert_login");
+      a.textContent = msg;
+      a.classList.remove("d-none");
+    }
+    function hideAlert(){
+      const a = el("alert_login");
+      a.textContent = "";
+      a.classList.add("d-none");
+    }
+
+    function setLoading(isLoading){
+      el("btn_login").disabled = isLoading;
+      el("pin_input").disabled = isLoading;
+      el("btn_login_spinner").classList.toggle("d-none", !isLoading);
+      el("btn_login_text").textContent = isLoading ? "Validando..." : "Ingresar";
+    }
+
+    function pinSanitize(v){
+      return (v || "").replace(/\D/g, "").slice(0, 4);
+    }
+
+    function saveSession(payload){
+      // payload: { user_id, display_name, role, session_token, expires_at }
+      localStorage.setItem("dp_session_token", payload.session_token);
+      localStorage.setItem("dp_role", payload.role);
+      localStorage.setItem("dp_display_name", payload.display_name);
+      localStorage.setItem("dp_user_id", payload.user_id);
+      localStorage.setItem("dp_expires_at", payload.expires_at);
+      localStorage.setItem("dp_last_activity", new Date().toISOString());
+    }
+
+    function redirectByRole(role){
+      const r = (role || "").toLowerCase();
+      if (r === "dispatch") window.location.href = ROUTES.dispatch;
+      else if (r === "cashier") window.location.href = ROUTES.cashier;
+      else if (r === "admin") window.location.href = ROUTES.admin;
+      else window.location.href = ROUTES.admin;
+    }
+
+    async function callRpc(fnName, body){
+      const url = `${SUPABASE_URL}/rest/v1/rpc/${fnName}`;
+      const res = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "apikey": SUPABASE_ANON_KEY,
+          "Authorization": `Bearer ${SUPABASE_ANON_KEY}`
+        },
+        body: JSON.stringify(body || {})
+      });
+
+      // PostgREST devuelve JSON incluso en error
+      const text = await res.text();
+      let data = null;
+      try { data = text ? JSON.parse(text) : null; } catch { data = null; }
+
+      if (!res.ok) {
+        const msg = (data && (data.message || data.error || data.details)) ? (data.message || data.error || data.details) : "Error de conexión con Supabase.";
+        throw new Error(msg);
+      }
+      return data;
+    }
+
+    /***********************
+     * INIT
+     ***********************/
+    // En login, si había sesión vieja, la limpiamos para evitar confusión.
+    // (Luego, si quieres “auto-redirect”, lo hacemos en un paso aparte.)
+    ["dp_session_token","dp_role","dp_display_name","dp_user_id","dp_expires_at","dp_last_activity"].forEach(k => localStorage.removeItem(k));
+
+    const pinInput = el("pin_input");
+    pinInput.focus();
+
+    pinInput.addEventListener("input", (e) => {
+      const clean = pinSanitize(e.target.value);
+      if (clean !== e.target.value) e.target.value = clean;
+      hideAlert();
+    });
+
+    el("btn_clear").addEventListener("click", () => {
+      hideAlert();
+      pinInput.value = "";
+      pinInput.focus();
+    });
+
+    el("loginForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      hideAlert();
+
+      const pin = pinSanitize(pinInput.value);
+      if (pin.length !== 4) {
+        showAlert("Ingresa un PIN válido de 4 dígitos.");
+        pinInput.focus();
+        return;
+      }
+
+      try{
+        setLoading(true);
+
+        // RPC: public.rpc_pin_login(p_pin text)
+        const rows = await callRpc("rpc_pin_login", { p_pin: pin });
+
+        if (!Array.isArray(rows) || rows.length === 0) {
+          showAlert("PIN incorrecto.");
+          pinInput.select();
+          return;
+        }
+
+        const session = rows[0];
+        saveSession(session);
+        redirectByRole(session.role);
+
+      } catch(err){
+        showAlert(err.message || "No se pudo iniciar sesión.");
+      } finally {
+        setLoading(false);
+      }
+    });
+  </script>
+</body>
+</html>
