@@ -1,0 +1,793 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>DespachoPharma | Despacho</title>
+
+  <!-- Bootstrap 5 -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+
+  <style>
+    :root{
+      --bg:#f8fafc;
+      --card:#ffffff;
+      --border:#e2e8f0;
+      --text:#0f172a;
+      --muted:#64748b;
+    }
+    body{ background:var(--bg); color:var(--text); }
+    .app-card{
+      background:var(--card);
+      border:1px solid var(--border);
+      border-radius:16px;
+      box-shadow: 0 6px 20px rgba(15,23,42,.06);
+    }
+    .brand-dot{ width:10px;height:10px;border-radius:999px;background:#3b82f6;display:inline-block;margin-right:8px; }
+    .mono{ font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono","Courier New", monospace; }
+    .barcode-input{ font-size:1.05rem; letter-spacing:.08rem; }
+    .table td, .table th { vertical-align: middle; }
+    .sticky-actions{ position: sticky; bottom: 0; background: rgba(248,250,252,.92); backdrop-filter: blur(6px); }
+  </style>
+</head>
+
+<body>
+  <!-- Navbar -->
+  <nav class="navbar navbar-expand-lg bg-white border-bottom">
+    <div class="container">
+      <a class="navbar-brand d-flex align-items-center" href="#">
+        <span class="brand-dot"></span>
+        <span class="fw-semibold">DespachoPharma</span>
+      </a>
+
+      <div class="ms-auto d-flex align-items-center gap-2">
+        <span class="badge text-bg-light border">
+          <span class="text-muted">Usuario:</span>
+          <span id="nav_user" class="ms-1 fw-semibold">—</span>
+        </span>
+        <span class="badge text-bg-light border">
+          <span class="text-muted">Rol:</span>
+          <span class="ms-1 fw-semibold">Despacho</span>
+        </span>
+        <button id="btn_logout" class="btn btn-outline-secondary btn-sm">Salir</button>
+      </div>
+    </div>
+  </nav>
+
+  <main class="container py-4">
+    <div class="row g-3">
+      <!-- Left column -->
+      <div class="col-12 col-lg-5">
+        <!-- Patient / cart start -->
+        <div class="app-card p-3 mb-3">
+          <div class="d-flex align-items-start justify-content-between gap-2">
+            <div>
+              <div class="fw-semibold">Paciente</div>
+              <div class="text-muted small">Ingresa expediente para abrir un carrito (draft).</div>
+            </div>
+            <span id="badge_status" class="badge text-bg-secondary">Sin carrito</span>
+          </div>
+
+          <div id="alert_patient" class="alert alert-danger d-none mt-3 mb-0" role="alert"></div>
+
+          <div class="mt-3">
+            <label class="form-label" for="expediente_input">Expediente</label>
+            <input id="expediente_input" class="form-control" inputmode="numeric" placeholder="Ej: 123456" />
+          </div>
+
+          <div class="d-grid gap-2 mt-3">
+            <button id="btn_start_dispatch" class="btn btn-primary">
+              <span id="btn_start_text">Abrir carrito</span>
+              <span id="btn_start_spinner" class="spinner-border spinner-border-sm ms-2 d-none" aria-hidden="true"></span>
+            </button>
+            <button id="btn_new" class="btn btn-outline-secondary d-none">Nuevo despacho</button>
+          </div>
+
+          <div class="mt-3 small text-muted">
+            <div class="d-flex justify-content-between">
+              <span>Carrito:</span>
+              <span id="current_dispatch_id" class="mono">—</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Scan panel -->
+        <div class="app-card p-3">
+          <div class="fw-semibold">Escaneo</div>
+          <div class="text-muted small">Pistolea el código de barras y presiona Enter.</div>
+
+          <div id="alert_scan" class="alert alert-danger d-none mt-3 mb-0" role="alert"></div>
+
+          <div class="row g-2 mt-2">
+            <div class="col-12">
+              <label class="form-label" for="barcode_input">Código de barras</label>
+              <input id="barcode_input" class="form-control barcode-input" placeholder="Escanea aquí…" autocomplete="off" />
+            </div>
+            <div class="col-6">
+              <label class="form-label" for="qty_input">Cantidad</label>
+              <input id="qty_input" class="form-control" inputmode="numeric" value="1" />
+            </div>
+            <div class="col-6 d-flex align-items-end">
+              <button id="btn_add_item" class="btn btn-success w-100">
+                <span id="btn_add_text">Agregar</span>
+                <span id="btn_add_spinner" class="spinner-border spinner-border-sm ms-2 d-none" aria-hidden="true"></span>
+              </button>
+            </div>
+          </div>
+
+          <div class="form-text mt-2">
+            Tip: si el lector agrega “Enter”, el sistema intentará agregar automáticamente.
+          </div>
+        </div>
+      </div>
+
+      <!-- Right column -->
+      <div class="col-12 col-lg-7">
+        <div class="app-card p-3">
+          <div class="d-flex align-items-start justify-content-between gap-2">
+            <div>
+              <div class="fw-semibold">Carrito</div>
+              <div class="text-muted small">Revisa antes de confirmar.</div>
+            </div>
+
+            <div class="text-end">
+              <div class="small text-muted">Totales</div>
+              <div class="fw-semibold">
+                <span id="cart_total_items">0</span> ítems • <span id="cart_total_units">0</span> unidades
+              </div>
+            </div>
+          </div>
+
+          <div id="alert_cart" class="alert alert-danger d-none mt-3 mb-0" role="alert"></div>
+
+          <div class="table-responsive mt-3">
+            <table class="table table-sm align-middle">
+              <thead class="table-light">
+                <tr>
+                  <th style="width:55%">Producto</th>
+                  <th class="text-center" style="width:15%">Cant.</th>
+                  <th class="text-end" style="width:30%">Acción</th>
+                </tr>
+              </thead>
+              <tbody id="cart_table_body">
+                <tr>
+                  <td colspan="3" class="text-center text-muted py-4">Sin items.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="sticky-actions pt-2">
+            <div class="d-flex flex-wrap gap-2 justify-content-between align-items-center">
+              <button id="btn_clear_cart" class="btn btn-outline-danger btn-sm" disabled>Vaciar carrito</button>
+
+              <button id="btn_confirm_open" class="btn btn-primary btn-sm" disabled>
+                Confirmar despacho
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="text-muted small mt-2">
+          La sesión se cerrará tras 30 min sin uso.
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Confirm Modal -->
+  <div class="modal fade" id="modal_confirm" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Confirmar despacho</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+        </div>
+        <div class="modal-body">
+          <div id="alert_confirm" class="alert alert-danger d-none" role="alert"></div>
+
+          <div class="d-flex flex-wrap gap-2 mb-3">
+            <span class="badge text-bg-light border">
+              Expediente: <span id="confirm_expediente" class="fw-semibold">—</span>
+            </span>
+            <span class="badge text-bg-light border">
+              Ítems: <span id="confirm_items" class="fw-semibold">0</span>
+            </span>
+            <span class="badge text-bg-light border">
+              Unidades: <span id="confirm_units" class="fw-semibold">0</span>
+            </span>
+          </div>
+
+          <div class="table-responsive">
+            <table class="table table-sm">
+              <thead class="table-light">
+                <tr>
+                  <th>Producto</th>
+                  <th class="text-center">Cantidad</th>
+                </tr>
+              </thead>
+              <tbody id="confirm_table_body"></tbody>
+            </table>
+          </div>
+
+          <div id="confirm_success" class="alert alert-success d-none mb-0" role="alert"></div>
+        </div>
+        <div class="modal-footer">
+          <button id="btn_confirm_close" type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cerrar</button>
+          <button id="btn_confirm_do" type="button" class="btn btn-primary">
+            <span id="btn_confirm_text">Confirmar y generar Entrega #</span>
+            <span id="btn_confirm_spinner" class="spinner-border spinner-border-sm ms-2 d-none" aria-hidden="true"></span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bootstrap bundle -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+
+  <script>
+    /***********************
+     * CONFIG (IGUAL QUE index.html)
+     ***********************/
+    const SUPABASE_URL = "https://rewdmcyqxyzcoeiikoow.supabase.co";
+    const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJld2RtY3lxeHl6Y29laWlrb293Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEwMDcxMDMsImV4cCI6MjA4NjU4MzEwM30.vRkCRFYez3zeL67Ik_niDrPu9wGt53gEqE6LLf_SUHE";
+
+    const ROUTES = {
+      login: "index.html",
+      cashier: "cashier.html",
+      history: "history.html"
+    };
+
+    /***********************
+     * HELPERS
+     ***********************/
+    const el = (id) => document.getElementById(id);
+
+    function showAlert(id, msg){
+      const a = el(id);
+      a.textContent = msg;
+      a.classList.remove("d-none");
+    }
+    function hideAlert(id){
+      const a = el(id);
+      a.textContent = "";
+      a.classList.add("d-none");
+    }
+
+    function getSession(){
+      return {
+        token: localStorage.getItem("dp_session_token") || "",
+        role: (localStorage.getItem("dp_role") || "").toLowerCase(),
+        name: localStorage.getItem("dp_display_name") || ""
+      };
+    }
+
+    function setLastActivity(){
+      localStorage.setItem("dp_last_activity", new Date().toISOString());
+    }
+
+    // Debounce para no tocar sesión en exceso
+    let lastTouchAt = 0;
+    async function touchSession(force=false){
+      const now = Date.now();
+      if (!force && (now - lastTouchAt) < 60_000) return true; // 1 min
+      lastTouchAt = now;
+
+      const { token } = getSession();
+      if (!token) return false;
+
+      const rows = await callRpc("rpc_session_touch", { p_session_token: token });
+      if (!Array.isArray(rows) || rows.length === 0) return false;
+      return true;
+    }
+
+    async function logoutAndGoLogin(){
+      try{
+        const { token } = getSession();
+        if (token) await callRpc("rpc_logout", { p_session_token: token });
+      }catch(_){}
+      ["dp_session_token","dp_role","dp_display_name","dp_user_id","dp_expires_at","dp_last_activity"].forEach(k => localStorage.removeItem(k));
+      sessionStorage.removeItem("dp_current_dispatch_id");
+      sessionStorage.removeItem("dp_current_expediente");
+      window.location.href = ROUTES.login;
+    }
+
+    async function callRpc(fnName, body){
+      const url = `${SUPABASE_URL}/rest/v1/rpc/${fnName}`;
+      const res = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "apikey": SUPABASE_ANON_KEY,
+          "Authorization": `Bearer ${SUPABASE_ANON_KEY}`
+        },
+        body: JSON.stringify(body || {})
+      });
+      const text = await res.text();
+      let data = null;
+      try { data = text ? JSON.parse(text) : null; } catch { data = null; }
+
+      if (!res.ok) {
+        const msg = (data && (data.message || data.error || data.details)) ? (data.message || data.error || data.details) : "Error de conexión con Supabase.";
+        throw new Error(msg);
+      }
+      return data;
+    }
+
+    function setBtnLoading(btnId, textId, spinnerId, isLoading, loadingText, normalText){
+      el(btnId).disabled = isLoading;
+      el(spinnerId).classList.toggle("d-none", !isLoading);
+      el(textId).textContent = isLoading ? loadingText : normalText;
+    }
+
+    function sanitizeDigits(v){
+      return (v || "").replace(/\D/g, "");
+    }
+
+    function setStatusBadge(status){
+      const b = el("badge_status");
+      b.className = "badge";
+      if (!status){
+        b.classList.add("text-bg-secondary");
+        b.textContent = "Sin carrito";
+        return;
+      }
+      if (status === "draft"){
+        b.classList.add("text-bg-warning");
+        b.textContent = "Draft";
+      } else if (status === "confirmed"){
+        b.classList.add("text-bg-success");
+        b.textContent = "Confirmado";
+      } else {
+        b.classList.add("text-bg-light","border");
+        b.textContent = status;
+      }
+    }
+
+    function setCartActionsEnabled(enabled){
+      el("btn_add_item").disabled = !enabled;
+      el("barcode_input").disabled = !enabled;
+      el("qty_input").disabled = !enabled;
+      el("btn_clear_cart").disabled = !enabled;
+      // confirmar depende además de que haya items (se ajusta al render)
+    }
+
+    /***********************
+     * CART STATE
+     ***********************/
+    function getCurrentDispatchId(){
+      return sessionStorage.getItem("dp_current_dispatch_id") || "";
+    }
+    function setCurrentDispatch(id){
+      sessionStorage.setItem("dp_current_dispatch_id", id);
+      el("current_dispatch_id").textContent = id ? (id.slice(0, 8) + "…") : "—";
+    }
+    function setCurrentExpediente(exp){
+      sessionStorage.setItem("dp_current_expediente", exp || "");
+    }
+    function getCurrentExpediente(){
+      return sessionStorage.getItem("dp_current_expediente") || "";
+    }
+
+    async function loadCart(){
+      hideAlert("alert_cart");
+      const { token } = getSession();
+      const dispatchId = getCurrentDispatchId();
+      if (!dispatchId){
+        setStatusBadge(null);
+        setCartActionsEnabled(false);
+        renderCart(null, []);
+        return;
+      }
+
+      const ok = await touchSession();
+      if (!ok) return logoutAndGoLogin();
+
+      const rows = await callRpc("rpc_dispatch_get", { p_session_token: token, p_dispatch_id: dispatchId });
+      if (!Array.isArray(rows) || rows.length === 0){
+        // si no existe o no permisos, limpiamos
+        setCurrentDispatch("");
+        setStatusBadge(null);
+        setCartActionsEnabled(false);
+        renderCart(null, []);
+        return;
+      }
+
+      const header = rows[0].header || null;
+      const items = rows[0].items || [];
+      setStatusBadge(header?.status || null);
+
+      // si ya se confirmó, bloquea modificaciones y muestra "Nuevo despacho"
+      const isDraft = (header?.status === "draft");
+      setCartActionsEnabled(isDraft);
+
+      el("btn_new").classList.toggle("d-none", isDraft || !header);
+      if (header?.status === "confirmed") {
+        // ya confirmado: aquí el usuario debería iniciar nuevo despacho
+      }
+
+      renderCart(header, items);
+    }
+
+    function renderCart(header, items){
+      const body = el("cart_table_body");
+      body.innerHTML = "";
+
+      const arr = Array.isArray(items) ? items : [];
+      const itemsCount = header?.items_count ?? arr.length ?? 0;
+      const totalUnits = header?.total_units ?? arr.reduce((s,x)=> s + (Number(x.qty)||0), 0);
+
+      el("cart_total_items").textContent = String(itemsCount || 0);
+      el("cart_total_units").textContent = String(totalUnits || 0);
+
+      const canConfirm = (header?.status === "draft") && (arr.length > 0);
+      el("btn_confirm_open").disabled = !canConfirm;
+      el("btn_clear_cart").disabled = !(header?.status === "draft" && arr.length > 0);
+
+      if (!header || arr.length === 0){
+        const tr = document.createElement("tr");
+        tr.innerHTML = `<td colspan="3" class="text-center text-muted py-4">Sin items.</td>`;
+        body.appendChild(tr);
+        return;
+      }
+
+      arr.forEach(it => {
+        const tr = document.createElement("tr");
+        const name = it.product_name || it.product_name_snapshot || "—";
+        const qty = Number(it.qty) || 0;
+        const barcode = it.barcode || "";
+
+        tr.innerHTML = `
+          <td>
+            <div class="fw-semibold">${escapeHtml(name)}</div>
+            <div class="small text-muted mono">${escapeHtml(barcode)}</div>
+          </td>
+          <td class="text-center fw-semibold">${qty}</td>
+          <td class="text-end">
+            <button class="btn btn-outline-danger btn-sm" data-action="remove" data-barcode="${escapeHtml(barcode)}" ${header.status !== "draft" ? "disabled":""}>
+              Eliminar
+            </button>
+          </td>
+        `;
+        body.appendChild(tr);
+      });
+
+      // Wire row actions
+      body.querySelectorAll('button[data-action="remove"]').forEach(btn => {
+        btn.addEventListener("click", async () => {
+          const barcode = btn.getAttribute("data-barcode");
+          await removeItem(barcode);
+        });
+      });
+    }
+
+    function escapeHtml(str){
+      return String(str ?? "").replace(/[&<>"']/g, (m) => ({
+        "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"
+      }[m]));
+    }
+
+    /***********************
+     * ACTIONS
+     ***********************/
+    async function startDispatch(){
+      hideAlert("alert_patient");
+      hideAlert("alert_scan");
+      hideAlert("alert_cart");
+
+      const { token } = getSession();
+      const exp = sanitizeDigits(el("expediente_input").value).slice(0, 20);
+      if (!exp){
+        showAlert("alert_patient", "Ingresa un expediente válido.");
+        el("expediente_input").focus();
+        return;
+      }
+
+      try{
+        setLastActivity();
+        setBtnLoading("btn_start_dispatch","btn_start_text","btn_start_spinner", true, "Abriendo…", "Abrir carrito");
+
+        const ok = await touchSession(true);
+        if (!ok) return logoutAndGoLogin();
+
+        const rows = await callRpc("rpc_dispatch_start", { p_session_token: token, p_expediente: exp });
+        if (!Array.isArray(rows) || rows.length === 0){
+          showAlert("alert_patient", "No se pudo crear el carrito.");
+          return;
+        }
+
+        const dispatchId = rows[0].dispatch_id;
+        setCurrentDispatch(dispatchId);
+        setCurrentExpediente(exp);
+
+        // Habilita scan
+        el("barcode_input").focus();
+        await loadCart();
+
+      } catch(err){
+        showAlert("alert_patient", err.message || "Error al crear el carrito.");
+      } finally {
+        setBtnLoading("btn_start_dispatch","btn_start_text","btn_start_spinner", false, "Abriendo…", "Abrir carrito");
+      }
+    }
+
+    async function addItem(){
+      hideAlert("alert_scan");
+      hideAlert("alert_cart");
+
+      const dispatchId = getCurrentDispatchId();
+      if (!dispatchId){
+        showAlert("alert_scan", "Primero abre un carrito con el expediente.");
+        el("expediente_input").focus();
+        return;
+      }
+
+      const { token } = getSession();
+      const barcode = (el("barcode_input").value || "").trim();
+      const qty = Number(sanitizeDigits(el("qty_input").value)) || 0;
+
+      if (!barcode){
+        showAlert("alert_scan", "Escanea o ingresa un código de barras.");
+        el("barcode_input").focus();
+        return;
+      }
+      if (!Number.isFinite(qty) || qty <= 0){
+        showAlert("alert_scan", "Cantidad inválida.");
+        el("qty_input").focus();
+        return;
+      }
+
+      try{
+        setLastActivity();
+        setBtnLoading("btn_add_item","btn_add_text","btn_add_spinner", true, "Agregando…", "Agregar");
+
+        const ok = await touchSession();
+        if (!ok) return logoutAndGoLogin();
+
+        await callRpc("rpc_dispatch_add_item", {
+          p_session_token: token,
+          p_dispatch_id: dispatchId,
+          p_barcode: barcode,
+          p_qty: qty
+        });
+
+        // Limpia input y refresca carrito
+        el("barcode_input").value = "";
+        el("qty_input").value = "1";
+        el("barcode_input").focus();
+        await loadCart();
+
+      } catch(err){
+        showAlert("alert_scan", err.message || "No se pudo agregar el producto.");
+        el("barcode_input").select();
+      } finally {
+        setBtnLoading("btn_add_item","btn_add_text","btn_add_spinner", false, "Agregando…", "Agregar");
+      }
+    }
+
+    async function removeItem(barcode){
+      hideAlert("alert_cart");
+
+      const dispatchId = getCurrentDispatchId();
+      const { token } = getSession();
+      if (!dispatchId || !barcode) return;
+
+      try{
+        setLastActivity();
+        const ok = await touchSession();
+        if (!ok) return logoutAndGoLogin();
+
+        await callRpc("rpc_dispatch_remove_item", {
+          p_session_token: token,
+          p_dispatch_id: dispatchId,
+          p_barcode: barcode
+        });
+
+        await loadCart();
+        el("barcode_input").focus();
+      } catch(err){
+        showAlert("alert_cart", err.message || "No se pudo eliminar el item.");
+      }
+    }
+
+    async function clearCart(){
+      // No hay RPC dedicada; eliminamos uno por uno.
+      const dispatchId = getCurrentDispatchId();
+      if (!dispatchId) return;
+
+      // Carga items actuales
+      const { token } = getSession();
+      try{
+        setLastActivity();
+        const ok = await touchSession();
+        if (!ok) return logoutAndGoLogin();
+
+        const rows = await callRpc("rpc_dispatch_get", { p_session_token: token, p_dispatch_id: dispatchId });
+        const items = rows?.[0]?.items || [];
+        if (!Array.isArray(items) || items.length === 0) return;
+
+        if (!confirm("¿Vaciar carrito? Esto eliminará todos los ítems del draft.")) return;
+
+        for (const it of items){
+          await callRpc("rpc_dispatch_remove_item", {
+            p_session_token: token,
+            p_dispatch_id: dispatchId,
+            p_barcode: it.barcode
+          });
+        }
+        await loadCart();
+        el("barcode_input").focus();
+      } catch(err){
+        showAlert("alert_cart", err.message || "No se pudo vaciar el carrito.");
+      }
+    }
+
+    async function openConfirmModal(){
+      hideAlert("alert_confirm");
+      el("confirm_success").classList.add("d-none");
+      el("confirm_success").textContent = "";
+
+      const dispatchId = getCurrentDispatchId();
+      const exp = getCurrentExpediente() || sanitizeDigits(el("expediente_input").value);
+
+      const { token } = getSession();
+      try{
+        setLastActivity();
+        const ok = await touchSession(true);
+        if (!ok) return logoutAndGoLogin();
+
+        const rows = await callRpc("rpc_dispatch_get", { p_session_token: token, p_dispatch_id: dispatchId });
+        const header = rows?.[0]?.header || {};
+        const items = rows?.[0]?.items || [];
+
+        el("confirm_expediente").textContent = header.expediente || exp || "—";
+        el("confirm_items").textContent = String(header.items_count ?? items.length ?? 0);
+        el("confirm_units").textContent = String(header.total_units ?? items.reduce((s,x)=>s+(Number(x.qty)||0),0));
+
+        const tb = el("confirm_table_body");
+        tb.innerHTML = "";
+        (items || []).forEach(it => {
+          const tr = document.createElement("tr");
+          tr.innerHTML = `
+            <td>
+              <div class="fw-semibold">${escapeHtml(it.product_name || "—")}</div>
+              <div class="small text-muted mono">${escapeHtml(it.barcode || "")}</div>
+            </td>
+            <td class="text-center fw-semibold">${Number(it.qty)||0}</td>
+          `;
+          tb.appendChild(tr);
+        });
+
+        const modal = bootstrap.Modal.getOrCreateInstance(el("modal_confirm"));
+        modal.show();
+
+      } catch(err){
+        showAlert("alert_cart", err.message || "No se pudo cargar el resumen.");
+      }
+    }
+
+    async function confirmDispatch(){
+      hideAlert("alert_confirm");
+      el("confirm_success").classList.add("d-none");
+      el("confirm_success").textContent = "";
+
+      const dispatchId = getCurrentDispatchId();
+      const { token } = getSession();
+
+      try{
+        setLastActivity();
+        setBtnLoading("btn_confirm_do","btn_confirm_text","btn_confirm_spinner", true, "Confirmando…", "Confirmar y generar Entrega #");
+
+        const ok = await touchSession(true);
+        if (!ok) return logoutAndGoLogin();
+
+        const rows = await callRpc("rpc_dispatch_confirm", { p_session_token: token, p_dispatch_id: dispatchId });
+        const deliveryNo = rows?.[0]?.delivery_no;
+
+        el("confirm_success").textContent = `Despacho confirmado. Entrega #${deliveryNo} generada.`;
+        el("confirm_success").classList.remove("d-none");
+
+        // Refresca y bloquea edición
+        await loadCart();
+        el("btn_new").classList.remove("d-none");
+
+      } catch(err){
+        showAlert("alert_confirm", err.message || "No se pudo confirmar el despacho.");
+      } finally {
+        setBtnLoading("btn_confirm_do","btn_confirm_text","btn_confirm_spinner", false, "Confirmando…", "Confirmar y generar Entrega #");
+      }
+    }
+
+    function resetForNewDispatch(){
+      sessionStorage.removeItem("dp_current_dispatch_id");
+      sessionStorage.removeItem("dp_current_expediente");
+
+      el("expediente_input").value = "";
+      el("barcode_input").value = "";
+      el("qty_input").value = "1";
+      el("current_dispatch_id").textContent = "—";
+      setStatusBadge(null);
+      setCartActionsEnabled(false);
+      renderCart(null, []);
+      el("btn_new").classList.add("d-none");
+      el("expediente_input").focus();
+    }
+
+    /***********************
+     * IDLE LOGIC (30 min)
+     ***********************/
+    const IDLE_MINUTES = 30;
+    const IDLE_MS = IDLE_MINUTES * 60 * 1000;
+
+    function wireActivityEvents(){
+      const events = ["mousemove","mousedown","keydown","touchstart","wheel"];
+      events.forEach(ev => window.addEventListener(ev, () => setLastActivity(), { passive: true }));
+    }
+
+    function startIdleWatcher(){
+      setInterval(async () => {
+        const last = localStorage.getItem("dp_last_activity");
+        if (!last) return;
+        const diff = Date.now() - new Date(last).getTime();
+        if (diff > IDLE_MS){
+          alert("Sesión cerrada por inactividad (30 min).");
+          await logoutAndGoLogin();
+        }
+      }, 30_000);
+    }
+
+    /***********************
+     * INIT
+     ***********************/
+    (async function init(){
+      const s = getSession();
+      if (!s.token) return window.location.href = ROUTES.login;
+
+      // Role gate
+      if (s.role !== "dispatch" && s.role !== "admin"){
+        // si entra cajero por error
+        if (s.role === "cashier") return window.location.href = ROUTES.cashier;
+        return window.location.href = ROUTES.login;
+      }
+
+      el("nav_user").textContent = s.name || "—";
+      setLastActivity();
+      wireActivityEvents();
+      startIdleWatcher();
+
+      // Sanitize inputs
+      el("expediente_input").addEventListener("input", (e) => e.target.value = sanitizeDigits(e.target.value).slice(0, 20));
+      el("qty_input").addEventListener("input", (e) => e.target.value = sanitizeDigits(e.target.value).slice(0, 6));
+
+      // Buttons
+      el("btn_start_dispatch").addEventListener("click", startDispatch);
+      el("btn_add_item").addEventListener("click", addItem);
+      el("btn_confirm_open").addEventListener("click", openConfirmModal);
+      el("btn_confirm_do").addEventListener("click", confirmDispatch);
+      el("btn_clear_cart").addEventListener("click", clearCart);
+      el("btn_new").addEventListener("click", resetForNewDispatch);
+
+      el("btn_logout").addEventListener("click", async () => {
+        if (!confirm("¿Cerrar sesión?")) return;
+        await logoutAndGoLogin();
+      });
+
+      // Enter-to-add on barcode
+      el("barcode_input").addEventListener("keydown", (e) => {
+        if (e.key === "Enter"){
+          e.preventDefault();
+          addItem();
+        }
+      });
+
+      // If we had a draft saved, load it
+      await loadCart();
+
+      // UX: focus
+      if (getCurrentDispatchId()) el("barcode_input").focus();
+      else el("expediente_input").focus();
+    })();
+  </script>
+</body>
+</html>
