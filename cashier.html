@@ -1,0 +1,775 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>DespachoPharma | Caja</title>
+
+  <!-- Bootstrap 5 -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+
+  <style>
+    :root{
+      --bg:#f8fafc;
+      --card:#ffffff;
+      --border:#e2e8f0;
+      --text:#0f172a;
+      --muted:#64748b;
+    }
+    body{ background:var(--bg); color:var(--text); }
+    .app-card{
+      background:var(--card);
+      border:1px solid var(--border);
+      border-radius:16px;
+      box-shadow: 0 6px 20px rgba(15,23,42,.06);
+    }
+    .brand-dot{ width:10px;height:10px;border-radius:999px;background:#3b82f6;display:inline-block;margin-right:8px; }
+    .mono{ font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono","Courier New", monospace; }
+    .table td, .table th { vertical-align: middle; }
+    .kbd-hint{ font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono","Courier New", monospace; }
+  </style>
+</head>
+
+<body>
+  <!-- Navbar -->
+  <nav class="navbar navbar-expand-lg bg-white border-bottom">
+    <div class="container">
+      <a class="navbar-brand d-flex align-items-center" href="#">
+        <span class="brand-dot"></span>
+        <span class="fw-semibold">DespachoPharma</span>
+      </a>
+
+      <div class="ms-auto d-flex align-items-center gap-2">
+        <span class="badge text-bg-light border">
+          <span class="text-muted">Usuario:</span>
+          <span id="nav_user" class="ms-1 fw-semibold">—</span>
+        </span>
+        <span class="badge text-bg-light border">
+          <span class="text-muted">Rol:</span>
+          <span class="ms-1 fw-semibold">Caja</span>
+        </span>
+        <button id="btn_logout" class="btn btn-outline-secondary btn-sm">Salir</button>
+      </div>
+    </div>
+  </nav>
+
+  <main class="container py-4">
+    <div class="row g-3">
+      <!-- Left: Search -->
+      <div class="col-12 col-lg-4">
+        <div class="app-card p-3">
+          <div class="fw-semibold">Búsqueda rápida</div>
+          <div class="text-muted small">Busca por <span class="fw-semibold">Entrega #</span>.</div>
+
+          <div id="alert_search" class="alert alert-danger d-none mt-3 mb-0" role="alert"></div>
+
+          <div class="mt-3">
+            <label for="delivery_input" class="form-label">Entrega #</label>
+            <input id="delivery_input" class="form-control" inputmode="numeric" placeholder="Ej: 3" />
+            <div class="form-text">Tip: escribe el número y presiona <span class="kbd-hint">Enter</span>.</div>
+          </div>
+
+          <div class="d-grid gap-2 mt-3">
+            <button id="btn_delivery_search" class="btn btn-primary">
+              <span id="btn_search_text">Buscar</span>
+              <span id="btn_search_spinner" class="spinner-border spinner-border-sm ms-2 d-none"></span>
+            </button>
+          </div>
+
+          <hr class="my-4">
+
+          <div class="fw-semibold">Rango (por defecto: hoy)</div>
+          <div class="text-muted small">Afecta los listados.</div>
+
+          <div class="row g-2 mt-2">
+            <div class="col-6">
+              <label class="form-label" for="date_from">Desde</label>
+              <input id="date_from" type="date" class="form-control" />
+            </div>
+            <div class="col-6">
+              <label class="form-label" for="date_to">Hasta</label>
+              <input id="date_to" type="date" class="form-control" />
+            </div>
+          </div>
+
+          <div class="d-grid gap-2 mt-3">
+            <button id="btn_reload" class="btn btn-outline-secondary">
+              <span id="btn_reload_text">Actualizar listados</span>
+              <span id="btn_reload_spinner" class="spinner-border spinner-border-sm ms-2 d-none"></span>
+            </button>
+          </div>
+
+          <div class="small text-muted mt-3">
+            Sesión: se cerrará tras 30 min sin uso.
+          </div>
+        </div>
+      </div>
+
+      <!-- Right: Lists -->
+      <div class="col-12 col-lg-8">
+        <div class="app-card p-3">
+          <div class="d-flex flex-wrap gap-2 justify-content-between align-items-start">
+            <div>
+              <div class="fw-semibold">Caja</div>
+              <div class="text-muted small">Pendientes y revisados del rango seleccionado.</div>
+            </div>
+
+            <div class="d-flex gap-2 align-items-center">
+              <label class="small text-muted m-0" for="reviewed_filter">Revisados:</label>
+              <select id="reviewed_filter" class="form-select form-select-sm" style="min-width: 180px;">
+                <option value="all" selected>Validados + Observados</option>
+                <option value="validated">Solo validados</option>
+                <option value="observed">Solo observados</option>
+              </select>
+            </div>
+          </div>
+
+          <div id="alert_lists" class="alert alert-danger d-none mt-3 mb-0" role="alert"></div>
+
+          <ul class="nav nav-pills mt-3" id="tabs">
+            <li class="nav-item">
+              <button class="nav-link active" id="tab_pending" data-bs-toggle="pill" data-bs-target="#pane_pending" type="button">
+                Pendientes <span id="count_pending" class="badge text-bg-light border ms-1">0</span>
+              </button>
+            </li>
+            <li class="nav-item">
+              <button class="nav-link" id="tab_reviewed" data-bs-toggle="pill" data-bs-target="#pane_reviewed" type="button">
+                Revisados <span id="count_reviewed" class="badge text-bg-light border ms-1">0</span>
+              </button>
+            </li>
+          </ul>
+
+          <div class="tab-content mt-3">
+            <!-- Pending -->
+            <div class="tab-pane fade show active" id="pane_pending">
+              <div class="table-responsive">
+                <table class="table table-sm align-middle">
+                  <thead class="table-light">
+                    <tr>
+                      <th style="width:12%">Entrega</th>
+                      <th style="width:20%">Expediente</th>
+                      <th style="width:18%">Hora</th>
+                      <th style="width:15%" class="text-center">Unidades</th>
+                      <th style="width:20%">Despacho</th>
+                      <th style="width:15%" class="text-end">Acción</th>
+                    </tr>
+                  </thead>
+                  <tbody id="pending_body">
+                    <tr><td colspan="6" class="text-center text-muted py-4">Cargando…</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <!-- Reviewed -->
+            <div class="tab-pane fade" id="pane_reviewed">
+              <div class="table-responsive">
+                <table class="table table-sm align-middle">
+                  <thead class="table-light">
+                    <tr>
+                      <th style="width:12%">Entrega</th>
+                      <th style="width:20%">Expediente</th>
+                      <th style="width:18%">Hora</th>
+                      <th style="width:15%" class="text-center">Unidades</th>
+                      <th style="width:20%">Estado</th>
+                      <th style="width:15%" class="text-end">Acción</th>
+                    </tr>
+                  </thead>
+                  <tbody id="reviewed_body">
+                    <tr><td colspan="6" class="text-center text-muted py-4">Cargando…</td></tr>
+                  </tbody>
+                </table>
+              </div>
+              <div class="small text-muted mt-2">
+                “Observado” requiere nota. “Validado” significa revisión de caja confirmada.
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Detail modal -->
+  <div class="modal fade" id="modal_detail" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+      <div class="modal-content">
+        <div class="modal-header">
+          <div>
+            <h5 class="modal-title mb-0">Detalle de entrega</h5>
+            <div class="small text-muted">
+              <span class="me-2">Entrega <span id="m_delivery" class="fw-semibold">—</span></span>
+              <span class="me-2">Exp <span id="m_exp" class="fw-semibold">—</span></span>
+              <span id="m_status_badge" class="badge text-bg-secondary">—</span>
+            </div>
+          </div>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+        </div>
+
+        <div class="modal-body">
+          <div id="alert_modal" class="alert alert-danger d-none" role="alert"></div>
+
+          <div class="d-flex flex-wrap gap-2 mb-3">
+            <span class="badge text-bg-light border">
+              Unidades: <span id="m_units" class="fw-semibold">0</span>
+            </span>
+            <span class="badge text-bg-light border">
+              Ítems: <span id="m_items" class="fw-semibold">0</span>
+            </span>
+            <span class="badge text-bg-light border">
+              Despacho: <span id="m_dispatcher" class="fw-semibold">—</span>
+            </span>
+            <span class="badge text-bg-light border">
+              Confirmado: <span id="m_confirmed_at" class="fw-semibold">—</span>
+            </span>
+          </div>
+
+          <div class="table-responsive">
+            <table class="table table-sm">
+              <thead class="table-light">
+                <tr>
+                  <th>Producto</th>
+                  <th class="text-center">Cantidad</th>
+                </tr>
+              </thead>
+              <tbody id="m_items_body"></tbody>
+            </table>
+          </div>
+
+          <div id="observed_block" class="mt-3 d-none">
+            <div class="fw-semibold">Observación</div>
+            <div class="small text-muted mb-2">Escribe el motivo. Se guarda en el registro.</div>
+            <textarea id="m_note" class="form-control" rows="3" placeholder="Ej: Cantidad no coincide…"></textarea>
+          </div>
+
+          <div id="m_existing_note" class="alert alert-warning d-none mt-3 mb-0"></div>
+        </div>
+
+        <div class="modal-footer">
+          <button class="btn btn-outline-secondary" data-bs-dismiss="modal">Cerrar</button>
+
+          <button id="btn_modal_observe" class="btn btn-outline-warning">
+            <span id="btn_observe_text">Observar</span>
+            <span id="btn_observe_spinner" class="spinner-border spinner-border-sm ms-2 d-none"></span>
+          </button>
+
+          <button id="btn_modal_validate" class="btn btn-success">
+            <span id="btn_validate_text">Validar</span>
+            <span id="btn_validate_spinner" class="spinner-border spinner-border-sm ms-2 d-none"></span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bootstrap bundle -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+
+  <script>
+    /***********************
+     * CONFIG (IGUAL QUE index.html)
+     ***********************/
+    const SUPABASE_URL = "https://rewdmcyqxyzcoeiikoow.supabase.co";
+    const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJld2RtY3lxeHl6Y29laWlrb293Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEwMDcxMDMsImV4cCI6MjA4NjU4MzEwM30.vRkCRFYez3zeL67Ik_niDrPu9wGt53gEqE6LLf_SUHE";
+
+    const ROUTES = {
+      login: "index.html",
+      dispatch: "dispatch.html"
+    };
+
+    /***********************
+     * HELPERS
+     ***********************/
+    const el = (id) => document.getElementById(id);
+
+    function showAlert(id, msg){
+      const a = el(id);
+      a.textContent = msg;
+      a.classList.remove("d-none");
+    }
+    function hideAlert(id){
+      const a = el(id);
+      a.textContent = "";
+      a.classList.add("d-none");
+    }
+
+    function getSession(){
+      return {
+        token: localStorage.getItem("dp_session_token") || "",
+        role: (localStorage.getItem("dp_role") || "").toLowerCase(),
+        name: localStorage.getItem("dp_display_name") || ""
+      };
+    }
+
+    function setLastActivity(){
+      localStorage.setItem("dp_last_activity", new Date().toISOString());
+    }
+
+    let lastTouchAt = 0;
+    async function touchSession(force=false){
+      const now = Date.now();
+      if (!force && (now - lastTouchAt) < 60_000) return true; // 1 min
+      lastTouchAt = now;
+
+      const { token } = getSession();
+      if (!token) return false;
+
+      const rows = await callRpc("rpc_session_touch", { p_session_token: token });
+      return (Array.isArray(rows) && rows.length > 0);
+    }
+
+    async function logoutAndGoLogin(){
+      try{
+        const { token } = getSession();
+        if (token) await callRpc("rpc_logout", { p_session_token: token });
+      } catch(_){}
+      ["dp_session_token","dp_role","dp_display_name","dp_user_id","dp_expires_at","dp_last_activity"].forEach(k => localStorage.removeItem(k));
+      window.location.href = ROUTES.login;
+    }
+
+    async function callRpc(fnName, body){
+      const url = `${SUPABASE_URL}/rest/v1/rpc/${fnName}`;
+      const res = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "apikey": SUPABASE_ANON_KEY,
+          "Authorization": `Bearer ${SUPABASE_ANON_KEY}`
+        },
+        body: JSON.stringify(body || {})
+      });
+
+      const text = await res.text();
+      let data = null;
+      try { data = text ? JSON.parse(text) : null; } catch { data = null; }
+
+      if (!res.ok) {
+        const msg = (data && (data.message || data.error || data.details)) ? (data.message || data.error || data.details) : "Error de conexión con Supabase.";
+        throw new Error(msg);
+      }
+      return data;
+    }
+
+    function setBtnLoading(btnId, textId, spinnerId, isLoading, loadingText, normalText){
+      el(btnId).disabled = isLoading;
+      el(spinnerId).classList.toggle("d-none", !isLoading);
+      el(textId).textContent = isLoading ? loadingText : normalText;
+    }
+
+    function sanitizeDigits(v){ return (v || "").replace(/\D/g, ""); }
+
+    function isoFromDateInput(dateStr, endOfDay=false){
+      // dateStr: "YYYY-MM-DD" in local timezone
+      if (!dateStr) return null;
+      const [y,m,d] = dateStr.split("-").map(Number);
+      const dt = new Date(y, (m-1), d, endOfDay ? 23 : 0, endOfDay ? 59 : 0, endOfDay ? 59 : 0, endOfDay ? 999 : 0);
+      return dt.toISOString();
+    }
+
+    function setDefaultDatesToday(){
+      const now = new Date();
+      const y = now.getFullYear();
+      const m = String(now.getMonth()+1).padStart(2,"0");
+      const d = String(now.getDate()).padStart(2,"0");
+      const today = `${y}-${m}-${d}`;
+      el("date_from").value = today;
+      el("date_to").value = today;
+    }
+
+    function fmtTime(ts){
+      if (!ts) return "—";
+      const d = new Date(ts);
+      return d.toLocaleString(undefined, { hour: "2-digit", minute:"2-digit", year:"numeric", month:"2-digit", day:"2-digit" });
+    }
+
+    function escapeHtml(str){
+      return String(str ?? "").replace(/[&<>"']/g, (m) => ({
+        "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"
+      }[m]));
+    }
+
+    /***********************
+     * DATA LOADERS
+     ***********************/
+    async function loadLists(){
+      hideAlert("alert_lists");
+
+      const { token } = getSession();
+      const ok = await touchSession();
+      if (!ok) return logoutAndGoLogin();
+
+      const fromIso = isoFromDateInput(el("date_from").value, false);
+      const toIso   = isoFromDateInput(el("date_to").value, true);
+
+      // Pendientes (confirmed)
+      const pending = await callRpc("rpc_dispatch_search", {
+        p_session_token: token,
+        p_date_from: fromIso,
+        p_date_to: toIso,
+        p_status: "confirmed",
+        p_expediente: null,
+        p_delivery_no: null,
+        p_created_by: null,
+        p_limit: 200,
+        p_offset: 0
+      });
+
+      // Revisados (validated/observed) - usamos search sin status y filtramos
+      const reviewedRaw = await callRpc("rpc_dispatch_search", {
+        p_session_token: token,
+        p_date_from: fromIso,
+        p_date_to: toIso,
+        p_status: null,
+        p_expediente: null,
+        p_delivery_no: null,
+        p_created_by: null,
+        p_limit: 200,
+        p_offset: 0
+      });
+
+      const reviewedFilter = el("reviewed_filter").value;
+      let reviewed = Array.isArray(reviewedRaw) ? reviewedRaw.filter(r => (r.status === "validated" || r.status === "observed")) : [];
+      if (reviewedFilter === "validated") reviewed = reviewed.filter(r => r.status === "validated");
+      if (reviewedFilter === "observed") reviewed = reviewed.filter(r => r.status === "observed");
+
+      renderPending(Array.isArray(pending) ? pending : []);
+      renderReviewed(reviewed);
+    }
+
+    function renderPending(rows){
+      const body = el("pending_body");
+      body.innerHTML = "";
+
+      el("count_pending").textContent = String(rows.length);
+
+      if (!rows.length){
+        body.innerHTML = `<tr><td colspan="6" class="text-center text-muted py-4">No hay pendientes en el rango.</td></tr>`;
+        return;
+      }
+
+      rows.forEach(r => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td class="mono fw-semibold">#${Number(r.delivery_no || 0)}</td>
+          <td class="fw-semibold">${escapeHtml(r.expediente || "")}</td>
+          <td class="text-muted">${escapeHtml(fmtTime(r.confirmed_at || r.created_at))}</td>
+          <td class="text-center fw-semibold">${Number(r.total_units || 0)}</td>
+          <td>${escapeHtml(r.created_by_name || "—")}</td>
+          <td class="text-end">
+            <button class="btn btn-primary btn-sm" data-action="open" data-dispatch="${escapeHtml(r.dispatch_id)}">Revisar</button>
+          </td>
+        `;
+        body.appendChild(tr);
+      });
+
+      body.querySelectorAll('button[data-action="open"]').forEach(btn => {
+        btn.addEventListener("click", async () => {
+          const id = btn.getAttribute("data-dispatch");
+          await openDetailByDispatchId(id);
+        });
+      });
+    }
+
+    function statusBadgeHtml(status){
+      if (status === "validated") return `<span class="badge text-bg-success">Validado</span>`;
+      if (status === "observed") return `<span class="badge text-bg-warning text-dark">Observado</span>`;
+      if (status === "confirmed") return `<span class="badge text-bg-primary">Pendiente</span>`;
+      return `<span class="badge text-bg-secondary">${escapeHtml(status || "—")}</span>`;
+    }
+
+    function renderReviewed(rows){
+      const body = el("reviewed_body");
+      body.innerHTML = "";
+
+      el("count_reviewed").textContent = String(rows.length);
+
+      if (!rows.length){
+        body.innerHTML = `<tr><td colspan="6" class="text-center text-muted py-4">No hay revisados en el rango.</td></tr>`;
+        return;
+      }
+
+      rows.forEach(r => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td class="mono fw-semibold">#${Number(r.delivery_no || 0)}</td>
+          <td class="fw-semibold">${escapeHtml(r.expediente || "")}</td>
+          <td class="text-muted">${escapeHtml(fmtTime((r.validated_at || r.observed_at || r.confirmed_at || r.created_at)))}</td>
+          <td class="text-center fw-semibold">${Number(r.total_units || 0)}</td>
+          <td>${statusBadgeHtml(r.status)}</td>
+          <td class="text-end">
+            <button class="btn btn-outline-secondary btn-sm" data-action="open" data-dispatch="${escapeHtml(r.dispatch_id)}">Ver</button>
+          </td>
+        `;
+        body.appendChild(tr);
+      });
+
+      body.querySelectorAll('button[data-action="open"]').forEach(btn => {
+        btn.addEventListener("click", async () => {
+          const id = btn.getAttribute("data-dispatch");
+          await openDetailByDispatchId(id);
+        });
+      });
+    }
+
+    /***********************
+     * DETAIL MODAL
+     ***********************/
+    let currentModalDispatchId = null;
+
+    function setModalStatus(status){
+      const b = el("m_status_badge");
+      b.className = "badge";
+      if (status === "confirmed") { b.classList.add("text-bg-primary"); b.textContent = "Pendiente"; }
+      else if (status === "validated") { b.classList.add("text-bg-success"); b.textContent = "Validado"; }
+      else if (status === "observed") { b.classList.add("text-bg-warning","text-dark"); b.textContent = "Observado"; }
+      else { b.classList.add("text-bg-secondary"); b.textContent = status || "—"; }
+    }
+
+    async function openDetailByDispatchId(dispatchId){
+      hideAlert("alert_modal");
+      el("m_items_body").innerHTML = "";
+      el("m_existing_note").classList.add("d-none");
+      el("m_existing_note").textContent = "";
+      el("observed_block").classList.add("d-none");
+      el("m_note").value = "";
+
+      const { token } = getSession();
+      const ok = await touchSession(true);
+      if (!ok) return logoutAndGoLogin();
+
+      const rows = await callRpc("rpc_dispatch_get", { p_session_token: token, p_dispatch_id: dispatchId });
+      if (!Array.isArray(rows) || rows.length === 0){
+        showAlert("alert_lists", "No se pudo abrir el detalle.");
+        return;
+      }
+
+      const header = rows[0].header || {};
+      const items = Array.isArray(rows[0].items) ? rows[0].items : [];
+
+      currentModalDispatchId = header.dispatch_id || dispatchId;
+
+      el("m_delivery").textContent = header.delivery_no ? `#${header.delivery_no}` : "—";
+      el("m_exp").textContent = header.expediente || "—";
+      setModalStatus(header.status);
+
+      el("m_units").textContent = String(header.total_units ?? 0);
+      el("m_items").textContent = String(header.items_count ?? items.length ?? 0);
+      el("m_dispatcher").textContent = header.created_by_name || "—";
+      el("m_confirmed_at").textContent = header.confirmed_at ? fmtTime(header.confirmed_at) : "—";
+
+      const tb = el("m_items_body");
+      tb.innerHTML = "";
+      items.forEach(it => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td>
+            <div class="fw-semibold">${escapeHtml(it.product_name || "—")}</div>
+            <div class="small text-muted mono">${escapeHtml(it.barcode || "")}</div>
+          </td>
+          <td class="text-center fw-semibold">${Number(it.qty || 0)}</td>
+        `;
+        tb.appendChild(tr);
+      });
+
+      // Buttons visibility:
+      const isConfirmed = (header.status === "confirmed");
+      el("btn_modal_validate").disabled = !isConfirmed;
+      el("btn_modal_observe").disabled = !isConfirmed;
+
+      if (header.status === "observed" && header.observation_note){
+        el("m_existing_note").textContent = `Observación: ${header.observation_note}`;
+        el("m_existing_note").classList.remove("d-none");
+      }
+
+      const modal = bootstrap.Modal.getOrCreateInstance(el("modal_detail"));
+      modal.show();
+    }
+
+    async function openDetailByDeliveryNo(deliveryNo){
+      hideAlert("alert_search");
+      const { token } = getSession();
+      const ok = await touchSession(true);
+      if (!ok) return logoutAndGoLogin();
+
+      const rows = await callRpc("rpc_dispatch_get_by_delivery_no", { p_session_token: token, p_delivery_no: Number(deliveryNo) });
+      if (!Array.isArray(rows) || rows.length === 0){
+        showAlert("alert_search", "Entrega no encontrada.");
+        return;
+      }
+      const header = rows[0].header || {};
+      await openDetailByDispatchId(header.dispatch_id);
+    }
+
+    async function doValidate(){
+      hideAlert("alert_modal");
+      if (!currentModalDispatchId) return;
+
+      const { token } = getSession();
+      try{
+        setLastActivity();
+        setBtnLoading("btn_modal_validate","btn_validate_text","btn_validate_spinner", true, "Validando…", "Validar");
+
+        const ok = await touchSession(true);
+        if (!ok) return logoutAndGoLogin();
+
+        await callRpc("rpc_cashier_validate", { p_session_token: token, p_dispatch_id: currentModalDispatchId });
+
+        // refrescar listados
+        await loadLists();
+
+        // reabrir detalle actualizado
+        await openDetailByDispatchId(currentModalDispatchId);
+
+      } catch(err){
+        showAlert("alert_modal", err.message || "No se pudo validar.");
+      } finally {
+        setBtnLoading("btn_modal_validate","btn_validate_text","btn_validate_spinner", false, "Validando…", "Validar");
+      }
+    }
+
+    async function doObserve(){
+      hideAlert("alert_modal");
+      if (!currentModalDispatchId) return;
+
+      // 1er click: mostrar textarea
+      if (el("observed_block").classList.contains("d-none")){
+        el("observed_block").classList.remove("d-none");
+        el("m_note").focus();
+        return;
+      }
+
+      const note = (el("m_note").value || "").trim();
+      if (note.length < 3){
+        showAlert("alert_modal", "La observación debe tener al menos 3 caracteres.");
+        el("m_note").focus();
+        return;
+      }
+
+      const { token } = getSession();
+      try{
+        setLastActivity();
+        setBtnLoading("btn_modal_observe","btn_observe_text","btn_observe_spinner", true, "Guardando…", "Observar");
+
+        const ok = await touchSession(true);
+        if (!ok) return logoutAndGoLogin();
+
+        await callRpc("rpc_cashier_observe", { p_session_token: token, p_dispatch_id: currentModalDispatchId, p_note: note });
+
+        await loadLists();
+        await openDetailByDispatchId(currentModalDispatchId);
+
+      } catch(err){
+        showAlert("alert_modal", err.message || "No se pudo observar.");
+      } finally {
+        setBtnLoading("btn_modal_observe","btn_observe_text","btn_observe_spinner", false, "Guardando…", "Observar");
+      }
+    }
+
+    /***********************
+     * IDLE LOGIC (30 min)
+     ***********************/
+    const IDLE_MINUTES = 30;
+    const IDLE_MS = IDLE_MINUTES * 60 * 1000;
+
+    function wireActivityEvents(){
+      const events = ["mousemove","mousedown","keydown","touchstart","wheel"];
+      events.forEach(ev => window.addEventListener(ev, () => setLastActivity(), { passive: true }));
+    }
+
+    function startIdleWatcher(){
+      setInterval(async () => {
+        const last = localStorage.getItem("dp_last_activity");
+        if (!last) return;
+        const diff = Date.now() - new Date(last).getTime();
+        if (diff > IDLE_MS){
+          alert("Sesión cerrada por inactividad (30 min).");
+          await logoutAndGoLogin();
+        }
+      }, 30_000);
+    }
+
+    /***********************
+     * INIT
+     ***********************/
+    (async function init(){
+      const s = getSession();
+      if (!s.token) return window.location.href = ROUTES.login;
+
+      // Role gate
+      if (s.role !== "cashier" && s.role !== "admin"){
+        if (s.role === "dispatch") return window.location.href = ROUTES.dispatch;
+        return window.location.href = ROUTES.login;
+      }
+
+      el("nav_user").textContent = s.name || "—";
+      setLastActivity();
+      wireActivityEvents();
+      startIdleWatcher();
+
+      setDefaultDatesToday();
+
+      // inputs
+      el("delivery_input").addEventListener("input", (e) => e.target.value = sanitizeDigits(e.target.value).slice(0, 12));
+      el("delivery_input").addEventListener("keydown", (e) => {
+        if (e.key === "Enter"){
+          e.preventDefault();
+          el("btn_delivery_search").click();
+        }
+      });
+
+      el("reviewed_filter").addEventListener("change", async () => {
+        await loadLists();
+      });
+
+      el("btn_delivery_search").addEventListener("click", async () => {
+        hideAlert("alert_search");
+        const deliveryNo = Number(sanitizeDigits(el("delivery_input").value));
+        if (!deliveryNo || deliveryNo <= 0){
+          showAlert("alert_search", "Ingresa un número de entrega válido.");
+          el("delivery_input").focus();
+          return;
+        }
+
+        try{
+          setLastActivity();
+          setBtnLoading("btn_delivery_search","btn_search_text","btn_search_spinner", true, "Buscando…", "Buscar");
+          await openDetailByDeliveryNo(deliveryNo);
+        } catch(err){
+          showAlert("alert_search", err.message || "No se pudo buscar la entrega.");
+        } finally {
+          setBtnLoading("btn_delivery_search","btn_search_text","btn_search_spinner", false, "Buscando…", "Buscar");
+        }
+      });
+
+      el("btn_reload").addEventListener("click", async () => {
+        hideAlert("alert_lists");
+        try{
+          setLastActivity();
+          setBtnLoading("btn_reload","btn_reload_text","btn_reload_spinner", true, "Actualizando…", "Actualizar listados");
+          await loadLists();
+        } catch(err){
+          showAlert("alert_lists", err.message || "No se pudieron cargar listados.");
+        } finally {
+          setBtnLoading("btn_reload","btn_reload_text","btn_reload_spinner", false, "Actualizando…", "Actualizar listados");
+        }
+      });
+
+      el("btn_modal_validate").addEventListener("click", doValidate);
+      el("btn_modal_observe").addEventListener("click", doObserve);
+
+      el("btn_logout").addEventListener("click", async () => {
+        if (!confirm("¿Cerrar sesión?")) return;
+        await logoutAndGoLogin();
+      });
+
+      // initial load
+      try{
+        await loadLists();
+      } catch(err){
+        showAlert("alert_lists", err.message || "No se pudieron cargar listados.");
+      }
+    })();
+  </script>
+</body>
+</html>
