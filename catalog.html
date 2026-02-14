@@ -19,6 +19,7 @@
     .brand-dot{ width:10px;height:10px;border-radius:999px;background:#3b82f6;display:inline-block;margin-right:8px; }
     .mono{ font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono","Courier New", monospace; }
     .table td,.table th{ vertical-align:middle; }
+    .nav-tabs .nav-link{ border-top-left-radius:12px; border-top-right-radius:12px; }
   </style>
 </head>
 
@@ -42,6 +43,7 @@
 
   <main class="container py-4">
     <div class="row g-3">
+      <!-- LEFT: filtros / acciones -->
       <div class="col-12 col-lg-4">
         <div class="app-card p-3">
           <div class="fw-semibold">Buscar</div>
@@ -77,12 +79,13 @@
         </div>
       </div>
 
+      <!-- RIGHT: tabs productos / usuarios -->
       <div class="col-12 col-lg-8">
         <div class="app-card p-3">
           <div class="d-flex justify-content-between align-items-start">
             <div>
-              <div class="fw-semibold">Catálogo</div>
-              <div class="text-muted small">Administra productos por código de barras (tabla: <span class="mono">pharma_catalog</span>).</div>
+              <div class="fw-semibold">Administración</div>
+              <div class="text-muted small">Productos (tabla: <span class="mono">pharma_catalog</span>) y usuarios (tabla: <span class="mono">app_users</span>).</div>
             </div>
             <div class="text-end">
               <div class="text-muted small">Total</div>
@@ -90,22 +93,90 @@
             </div>
           </div>
 
-          <div id="alert_table" class="alert alert-danger d-none mt-3 mb-0"></div>
+          <ul class="nav nav-tabs mt-3" id="tabs" role="tablist">
+            <li class="nav-item" role="presentation">
+              <button class="nav-link active" id="tab-products" data-bs-toggle="tab" data-bs-target="#panel-products" type="button" role="tab">
+                Productos
+              </button>
+            </li>
+            <li class="nav-item" role="presentation">
+              <button class="nav-link" id="tab-users" data-bs-toggle="tab" data-bs-target="#panel-users" type="button" role="tab">
+                Usuarios
+              </button>
+            </li>
+          </ul>
 
-          <div class="table-responsive mt-3">
-            <table class="table table-sm">
-              <thead class="table-light">
-                <tr>
-                  <th style="width:30%">Barcode</th>
-                  <th style="width:45%">Producto</th>
-                  <th style="width:10%">Estado</th>
-                  <th style="width:15%" class="text-end">Acción</th>
-                </tr>
-              </thead>
-              <tbody id="tbody">
-                <tr><td colspan="4" class="text-center text-muted py-4">Busca para ver resultados.</td></tr>
-              </tbody>
-            </table>
+          <div class="tab-content pt-3">
+            <!-- Panel Productos -->
+            <div class="tab-pane fade show active" id="panel-products" role="tabpanel" aria-labelledby="tab-products">
+              <div id="alert_table" class="alert alert-danger d-none mt-2 mb-0"></div>
+
+              <div class="table-responsive mt-3">
+                <table class="table table-sm">
+                  <thead class="table-light">
+                    <tr>
+                      <th style="width:30%">Barcode</th>
+                      <th style="width:45%">Producto</th>
+                      <th style="width:10%">Estado</th>
+                      <th style="width:15%" class="text-end">Acción</th>
+                    </tr>
+                  </thead>
+                  <tbody id="tbody">
+                    <tr><td colspan="4" class="text-center text-muted py-4">Busca para ver resultados.</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <!-- Panel Usuarios -->
+            <div class="tab-pane fade" id="panel-users" role="tabpanel" aria-labelledby="tab-users">
+              <div class="d-flex flex-wrap gap-2 align-items-end">
+                <div class="flex-grow-1">
+                  <label class="form-label mb-1" for="u_q">Buscar usuario</label>
+                  <input id="u_q" class="form-control" placeholder="Ej: Despacho 1 / Cajero..." autocomplete="off" />
+                </div>
+                <div style="min-width:180px;">
+                  <label class="form-label mb-1" for="u_role">Rol</label>
+                  <select id="u_role" class="form-select">
+                    <option value="all" selected>Todos</option>
+                    <option value="admin">Admin</option>
+                    <option value="dispatch">Despacho</option>
+                    <option value="cashier">Cajero</option>
+                  </select>
+                </div>
+                <div class="d-flex gap-2">
+                  <button id="btn_users_refresh" class="btn btn-outline-primary">
+                    <span id="btn_users_refresh_text">Actualizar</span>
+                    <span id="btn_users_refresh_spinner" class="spinner-border spinner-border-sm ms-2 d-none"></span>
+                  </button>
+                  <button id="btn_user_new" class="btn btn-success">Nuevo usuario</button>
+                </div>
+              </div>
+
+              <div id="alert_users" class="alert alert-danger d-none mt-3 mb-0"></div>
+
+              <div class="table-responsive mt-3">
+                <table class="table table-sm">
+                  <thead class="table-light">
+                    <tr>
+                      <th style="width:34%">Nombre</th>
+                      <th style="width:14%">Rol</th>
+                      <th style="width:14%">Estado</th>
+                      <th style="width:18%">Creado</th>
+                      <th style="width:20%" class="text-end">Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody id="u_tbody">
+                    <tr><td colspan="5" class="text-center text-muted py-4">Cargando usuarios…</td></tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <div class="small text-muted mt-2">
+                Nota: el PIN no se muestra por seguridad. Puedes resetearlo desde “Reset PIN”.
+              </div>
+            </div>
+
           </div>
 
         </div>
@@ -113,7 +184,7 @@
     </div>
   </main>
 
-  <!-- Modal: Upsert -->
+  <!-- Modal: Upsert Producto -->
   <div class="modal fade" id="modal_upsert" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog">
       <div class="modal-content">
@@ -138,13 +209,93 @@
             <input id="m_active" class="form-check-input" type="checkbox" checked />
             <label class="form-check-label" for="m_active">Activo</label>
           </div>
-
         </div>
         <div class="modal-footer">
           <button class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
           <button id="btn_save" class="btn btn-primary">
             <span id="btn_save_text">Guardar</span>
             <span id="btn_save_spinner" class="spinner-border spinner-border-sm ms-2 d-none"></span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Crear Usuario -->
+  <div class="modal fade" id="modal_user_create" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Nuevo usuario</h5>
+          <button class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+        </div>
+        <div class="modal-body">
+          <div id="alert_user_create" class="alert alert-danger d-none"></div>
+
+          <div class="mb-3">
+            <label class="form-label" for="uc_name">Nombre</label>
+            <input id="uc_name" class="form-control" placeholder="Ej: Despacho 4" autocomplete="off" />
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label" for="uc_role">Rol</label>
+            <select id="uc_role" class="form-select">
+              <option value="dispatch" selected>Despacho</option>
+              <option value="cashier">Cajero</option>
+              <option value="admin">Admin</option>
+            </select>
+          </div>
+
+          <div class="mb-2">
+            <label class="form-label" for="uc_pin">PIN (4 dígitos)</label>
+            <div class="input-group">
+              <input id="uc_pin" class="form-control mono" inputmode="numeric" placeholder="Ej: 1187" autocomplete="off" />
+              <button class="btn btn-outline-secondary" id="btn_uc_gen" type="button">Generar</button>
+            </div>
+            <div class="form-text">El PIN se asigna y no se muestra luego.</div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+          <button id="btn_uc_create" class="btn btn-primary">
+            <span id="btn_uc_create_text">Crear</span>
+            <span id="btn_uc_create_spinner" class="spinner-border spinner-border-sm ms-2 d-none"></span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Reset PIN -->
+  <div class="modal fade" id="modal_user_pin" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Reset PIN</h5>
+          <button class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+        </div>
+        <div class="modal-body">
+          <div id="alert_user_pin" class="alert alert-danger d-none"></div>
+
+          <div class="mb-2">
+            <div class="text-muted small">Usuario</div>
+            <div class="fw-semibold" id="up_user_label">—</div>
+            <div class="text-muted small mono" id="up_user_id">—</div>
+          </div>
+
+          <div class="mt-3">
+            <label class="form-label" for="up_pin">Nuevo PIN (4 dígitos)</label>
+            <div class="input-group">
+              <input id="up_pin" class="form-control mono" inputmode="numeric" placeholder="Ej: 2249" autocomplete="off" />
+              <button class="btn btn-outline-secondary" id="btn_up_gen" type="button">Generar</button>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+          <button id="btn_up_save" class="btn btn-primary">
+            <span id="btn_up_save_text">Guardar</span>
+            <span id="btn_up_save_spinner" class="spinner-border spinner-border-sm ms-2 d-none"></span>
           </button>
         </div>
       </div>
@@ -162,13 +313,22 @@
 
     const ROUTES = { login:"index.html", history:"history.html", dispatch:"dispatch.html", cashier:"cashier.html" };
 
-    // RPCs NUEVOS (pharma_catalog)
+    // RPCs
     const RPC = {
+      // productos
       search: "rpc_pharma_catalog_search",
       upsert: "rpc_pharma_catalog_upsert",
       setActive: "rpc_pharma_catalog_set_active",
+
+      // sesiones
       touch: "rpc_session_touch",
-      logout: "rpc_logout"
+      logout: "rpc_logout",
+
+      // usuarios (admin)
+      userList: "rpc_admin_user_list",
+      userCreate: "rpc_admin_user_create",
+      userSetPin: "rpc_admin_user_set_pin",
+      userSetActive: "rpc_admin_user_set_active",
     };
 
     /***********************
@@ -185,7 +345,8 @@
       return {
         token: localStorage.getItem("dp_session_token")||"",
         role: (localStorage.getItem("dp_role")||"").toLowerCase(),
-        name: localStorage.getItem("dp_display_name")||""
+        name: localStorage.getItem("dp_display_name")||"",
+        user_id: localStorage.getItem("dp_user_id")||""
       };
     }
 
@@ -198,8 +359,13 @@
     }
 
     function normalizeBarcode(v){
-      // Scanner a veces mete espacios o saltos; dejamos solo dígitos
       return String(v||"").trim().replace(/\D/g,"");
+    }
+    function normalizePin(v){
+      return String(v||"").trim().replace(/\D/g,"").slice(0,4);
+    }
+    function genPin4(){
+      return String(Math.floor(1000 + Math.random()*9000));
     }
 
     async function callRpc(fn, body){
@@ -265,12 +431,28 @@
         : `<span class="badge text-bg-secondary">Inactivo</span>`;
     }
 
+    function roleLabel(role){
+      const r = String(role||"").toLowerCase();
+      if(r==="admin") return `<span class="badge text-bg-dark">Admin</span>`;
+      if(r==="dispatch") return `<span class="badge text-bg-primary">Despacho</span>`;
+      if(r==="cashier") return `<span class="badge text-bg-secondary">Cajero</span>`;
+      return `<span class="badge text-bg-light border">${esc(role||"")}</span>`;
+    }
+
+    function fmtDate(ts){
+      try{
+        const d = new Date(ts);
+        if(isNaN(d.getTime())) return esc(ts||"");
+        return d.toLocaleString("es-SV", { year:"numeric", month:"2-digit", day:"2-digit", hour:"2-digit", minute:"2-digit" });
+      }catch{ return esc(ts||""); }
+    }
+
     /***********************
-     * UI / Data
+     * Productos
      ***********************/
     let currentRows = [];
 
-    function render(rows){
+    function renderProducts(rows){
       currentRows = rows;
       el("count").textContent = String(rows.length);
 
@@ -303,11 +485,11 @@
       });
 
       tb.querySelectorAll('button[data-act="toggle"]').forEach(b=>{
-        b.addEventListener("click",()=>toggleActive(b.getAttribute("data-bc"), b.getAttribute("data-active")==="true"));
+        b.addEventListener("click",()=>toggleProductActive(b.getAttribute("data-bc"), b.getAttribute("data-active")==="true"));
       });
     }
 
-    function openNew(){
+    function openNewProduct(){
       hideAlert("alert_modal");
       el("m_barcode").value = "";
       el("m_name").value = "";
@@ -327,14 +509,13 @@
       el("m_name").value = row.product_name || "";
       el("m_active").checked = !!row.active;
 
-      // En MVP no cambiamos barcode en edición
       el("m_barcode").disabled = true;
 
       bootstrap.Modal.getOrCreateInstance(el("modal_upsert")).show();
       setTimeout(()=>el("m_name").focus(), 150);
     }
 
-    async function doSearch(){
+    async function doProductSearch(){
       hideAlert("alert_search");
       hideAlert("alert_table");
 
@@ -358,7 +539,7 @@
         p_offset: 0
       });
 
-      render(Array.isArray(rows) ? rows : []);
+      renderProducts(Array.isArray(rows) ? rows : []);
     }
 
     async function saveProduct(){
@@ -386,7 +567,7 @@
         });
 
         bootstrap.Modal.getOrCreateInstance(el("modal_upsert")).hide();
-        await doSearch();
+        await doProductSearch();
       } catch(err){
         showAlert("alert_modal", err.message || "No se pudo guardar.");
       } finally {
@@ -394,7 +575,7 @@
       }
     }
 
-    async function toggleActive(barcode, isActive){
+    async function toggleProductActive(barcode, isActive){
       hideAlert("alert_table");
 
       const ok = await touchSession(true);
@@ -412,9 +593,197 @@
           p_active: next
         });
 
-        await doSearch();
+        await doProductSearch();
       } catch(err){
         showAlert("alert_table", err.message || "No se pudo cambiar estado.");
+      }
+    }
+
+    /***********************
+     * Usuarios
+     ***********************/
+    let userRows = [];
+    let pinTargetUserId = null;
+
+    function filterUsers(rows){
+      const q = (el("u_q").value||"").trim().toLowerCase();
+      const role = el("u_role").value;
+
+      return (rows||[]).filter(r=>{
+        const nameOk = !q || String(r.display_name||"").toLowerCase().includes(q);
+        const roleOk = (role==="all") || (String(r.role||"").toLowerCase()===role);
+        return nameOk && roleOk;
+      });
+    }
+
+    function renderUsers(rows){
+      const tb = el("u_tbody");
+      tb.innerHTML = "";
+
+      const filtered = filterUsers(rows);
+
+      el("count").textContent = String(filtered.length);
+
+      if(!filtered.length){
+        tb.innerHTML = `<tr><td colspan="5" class="text-center text-muted py-4">Sin usuarios (o no coincide el filtro).</td></tr>`;
+        return;
+      }
+
+      const me = (getSession().user_id || "").toLowerCase();
+
+      filtered.forEach(u=>{
+        const isMe = me && String(u.id||"").toLowerCase() === me;
+
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td>
+            <div class="fw-semibold">${esc(u.display_name||"")}</div>
+            <div class="text-muted small mono">${esc(u.id||"")}</div>
+          </td>
+          <td>${roleLabel(u.role)}</td>
+          <td>${statusBadge(!!u.active)}</td>
+          <td class="small text-muted">${fmtDate(u.created_at)}</td>
+          <td class="text-end">
+            <button class="btn btn-outline-primary btn-sm" data-act="pin" data-id="${esc(u.id)}" data-name="${esc(u.display_name)}">Reset PIN</button>
+            <button class="btn btn-outline-secondary btn-sm ms-1" data-act="ua" data-id="${esc(u.id)}" data-active="${u.active ? "true":"false"}" ${isMe ? "disabled" : ""}>
+              ${u.active ? "Desactivar" : "Activar"}
+            </button>
+          </td>
+        `;
+        tb.appendChild(tr);
+      });
+
+      tb.querySelectorAll('button[data-act="pin"]').forEach(b=>{
+        b.addEventListener("click", ()=>openResetPin(b.getAttribute("data-id"), b.getAttribute("data-name")));
+      });
+
+      tb.querySelectorAll('button[data-act="ua"]').forEach(b=>{
+        b.addEventListener("click", ()=>toggleUserActive(b.getAttribute("data-id"), b.getAttribute("data-active")==="true"));
+      });
+    }
+
+    async function loadUsers(){
+      hideAlert("alert_users");
+
+      const ok = await touchSession(true);
+      if(!ok) return logoutAndGoLogin();
+
+      const s = getSession();
+      const rows = await callRpc(RPC.userList, { p_session_token: s.token });
+
+      userRows = Array.isArray(rows) ? rows : [];
+      renderUsers(userRows);
+    }
+
+    function openCreateUser(){
+      hideAlert("alert_user_create");
+      el("uc_name").value = "";
+      el("uc_role").value = "dispatch";
+      el("uc_pin").value = "";
+
+      bootstrap.Modal.getOrCreateInstance(el("modal_user_create")).show();
+      setTimeout(()=>el("uc_name").focus(), 150);
+    }
+
+    async function createUser(){
+      hideAlert("alert_user_create");
+
+      const ok = await touchSession(true);
+      if(!ok) return logoutAndGoLogin();
+
+      const s = getSession();
+      const name = (el("uc_name").value||"").trim();
+      const role = el("uc_role").value;
+      const pin = normalizePin(el("uc_pin").value);
+
+      if(name.length < 3) return showAlert("alert_user_create","Nombre muy corto.");
+      if(!["admin","dispatch","cashier"].includes(role)) return showAlert("alert_user_create","Rol inválido.");
+      if(!/^\d{4}$/.test(pin)) return showAlert("alert_user_create","PIN debe ser 4 dígitos.");
+
+      try{
+        btnLoad("btn_uc_create","btn_uc_create_text","btn_uc_create_spinner", true, "Creando…", "Crear");
+
+        await callRpc(RPC.userCreate, {
+          p_session_token: s.token,
+          p_display_name: name,
+          p_role: role,
+          p_pin: pin
+        });
+
+        bootstrap.Modal.getOrCreateInstance(el("modal_user_create")).hide();
+        await loadUsers();
+        alert(`Usuario creado.\nEntrega el PIN al usuario: ${pin}`);
+      } catch(err){
+        showAlert("alert_user_create", err.message || "No se pudo crear.");
+      } finally {
+        btnLoad("btn_uc_create","btn_uc_create_text","btn_uc_create_spinner", false, "Creando…", "Crear");
+      }
+    }
+
+    function openResetPin(userId, displayName){
+      hideAlert("alert_user_pin");
+      pinTargetUserId = userId;
+
+      el("up_user_label").textContent = displayName || "—";
+      el("up_user_id").textContent = userId || "—";
+      el("up_pin").value = "";
+
+      bootstrap.Modal.getOrCreateInstance(el("modal_user_pin")).show();
+      setTimeout(()=>el("up_pin").focus(), 150);
+    }
+
+    async function saveResetPin(){
+      hideAlert("alert_user_pin");
+
+      const ok = await touchSession(true);
+      if(!ok) return logoutAndGoLogin();
+
+      const s = getSession();
+      const pin = normalizePin(el("up_pin").value);
+
+      if(!pinTargetUserId) return showAlert("alert_user_pin","Usuario inválido.");
+      if(!/^\d{4}$/.test(pin)) return showAlert("alert_user_pin","PIN debe ser 4 dígitos.");
+
+      try{
+        btnLoad("btn_up_save","btn_up_save_text","btn_up_save_spinner", true, "Guardando…", "Guardar");
+
+        await callRpc(RPC.userSetPin, {
+          p_session_token: s.token,
+          p_user_id: pinTargetUserId,
+          p_pin: pin
+        });
+
+        bootstrap.Modal.getOrCreateInstance(el("modal_user_pin")).hide();
+        await loadUsers();
+        alert(`PIN actualizado.\nEntrega el nuevo PIN: ${pin}`);
+      } catch(err){
+        showAlert("alert_user_pin", err.message || "No se pudo guardar.");
+      } finally {
+        btnLoad("btn_up_save","btn_up_save_text","btn_up_save_spinner", false, "Guardando…", "Guardar");
+      }
+    }
+
+    async function toggleUserActive(userId, isActive){
+      hideAlert("alert_users");
+
+      const ok = await touchSession(true);
+      if(!ok) return logoutAndGoLogin();
+
+      const s = getSession();
+      const next = !isActive;
+
+      if(!confirm(`${next ? "Activar" : "Desactivar"} usuario?\n${userId}`)) return;
+
+      try{
+        await callRpc(RPC.userSetActive, {
+          p_session_token: s.token,
+          p_user_id: userId,
+          p_active: next
+        });
+
+        await loadUsers();
+      } catch(err){
+        showAlert("alert_users", err.message || "No se pudo cambiar estado.");
       }
     }
 
@@ -445,10 +814,11 @@
         await logoutAndGoLogin();
       });
 
+      // Productos
       el("btn_search").addEventListener("click", async ()=>{
         try{
           btnLoad("btn_search","btn_search_text","btn_search_spinner", true, "Buscando…", "Buscar");
-          await doSearch();
+          await doProductSearch();
         } catch(err){
           showAlert("alert_search", err.message || "No se pudo buscar.");
         } finally {
@@ -460,14 +830,47 @@
         if(e.key==="Enter"){ e.preventDefault(); el("btn_search").click(); }
       });
 
-      el("btn_new").addEventListener("click", openNew);
+      el("btn_new").addEventListener("click", openNewProduct);
       el("btn_save").addEventListener("click", saveProduct);
 
-      // Normaliza barcode en modal mientras escribe/escanea
       el("m_barcode").addEventListener("input",(e)=>{ e.target.value = normalizeBarcode(e.target.value); });
 
-      // carga inicial
-      await doSearch();
+      // Usuarios
+      el("btn_user_new").addEventListener("click", openCreateUser);
+      el("btn_uc_create").addEventListener("click", createUser);
+      el("btn_uc_gen").addEventListener("click", ()=>{ el("uc_pin").value = genPin4(); });
+
+      el("uc_pin").addEventListener("input", (e)=>{ e.target.value = normalizePin(e.target.value); });
+      el("up_pin").addEventListener("input", (e)=>{ e.target.value = normalizePin(e.target.value); });
+      el("btn_up_gen").addEventListener("click", ()=>{ el("up_pin").value = genPin4(); });
+      el("btn_up_save").addEventListener("click", saveResetPin);
+
+      el("btn_users_refresh").addEventListener("click", async ()=>{
+        hideAlert("alert_users");
+        try{
+          btnLoad("btn_users_refresh","btn_users_refresh_text","btn_users_refresh_spinner", true, "Actualizando…", "Actualizar");
+          await loadUsers();
+        } catch(err){
+          showAlert("alert_users", err.message || "No se pudo cargar usuarios.");
+        } finally {
+          btnLoad("btn_users_refresh","btn_users_refresh_text","btn_users_refresh_spinner", false, "Actualizando…", "Actualizar");
+        }
+      });
+
+      el("u_q").addEventListener("input", ()=>renderUsers(userRows));
+      el("u_role").addEventListener("change", ()=>renderUsers(userRows));
+
+      // cuando cambias al tab Usuarios, carga lista (1 vez o cada vez)
+      el("tab-users").addEventListener("shown.bs.tab", async ()=>{
+        if(!userRows.length){
+          try{ await loadUsers(); } catch(err){ showAlert("alert_users", err.message || "No se pudo cargar usuarios."); }
+        } else {
+          renderUsers(userRows);
+        }
+      });
+
+      // carga inicial: productos
+      await doProductSearch();
     })();
   </script>
 </body>
