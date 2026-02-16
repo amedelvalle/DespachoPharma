@@ -5,7 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>DespachoPharma | Histórico</title>
 
-  <!-- Bootstrap 5 -->
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
 
   <style>
@@ -30,7 +29,6 @@
 </head>
 
 <body>
-  <!-- Navbar -->
   <nav class="navbar navbar-expand-lg bg-white border-bottom">
     <div class="container">
       <a class="navbar-brand d-flex align-items-center" href="#">
@@ -54,7 +52,6 @@
 
   <main class="container py-4">
     <div class="row g-3">
-      <!-- Filters -->
       <div class="col-12 col-lg-4">
         <div class="app-card p-3">
           <div class="fw-semibold">Filtros</div>
@@ -96,7 +93,7 @@
             <div class="col-12">
               <label class="form-label" for="created_by_name">Despachador (texto)</label>
               <input id="created_by_name" class="form-control" placeholder="Ej: Despacho 1" />
-              <div class="form-text">Filtro local por nombre (no requiere UUID).</div>
+              <div class="form-text">Filtro local por nombre (post-búsqueda).</div>
             </div>
           </div>
 
@@ -118,7 +115,6 @@
         </div>
       </div>
 
-      <!-- Results -->
       <div class="col-12 col-lg-8">
         <div class="app-card p-3">
           <div class="d-flex flex-wrap gap-2 justify-content-between align-items-start">
@@ -127,7 +123,7 @@
               <div class="text-muted small">Click en “Ver” para abrir el detalle.</div>
             </div>
             <div class="text-end">
-              <div class="text-muted small">Total</div>
+              <div class="text-muted small">Total (en vista)</div>
               <div class="fw-semibold"><span id="count_results">0</span> registros</div>
             </div>
           </div>
@@ -162,7 +158,6 @@
     </div>
   </main>
 
-  <!-- Detail modal -->
   <div class="modal fade" id="modal_detail" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-lg modal-dialog-scrollable">
       <div class="modal-content">
@@ -224,7 +219,6 @@
     </div>
   </div>
 
-  <!-- Bootstrap bundle -->
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 
   <script>
@@ -233,7 +227,6 @@
      ***********************/
     const SUPABASE_URL = "https://rewdmcyqxyzcoeiikoow.supabase.co";
     const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJld2RtY3lxeHl6Y29laWlrb293Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEwMDcxMDMsImV4cCI6MjA4NjU4MzEwM30.vRkCRFYez3zeL67Ik_niDrPu9wGt53gEqE6LLf_SUHE";
-
     const ROUTES = { login: "index.html", dispatch: "dispatch.html", cashier: "cashier.html" };
 
     /***********************/
@@ -288,16 +281,20 @@
       let data = null;
       try { data = text ? JSON.parse(text) : null; } catch { data = null; }
       if (!res.ok){
-        const msg = (data && (data.message || data.error || data.details)) ? (data.message || data.error || data.details) : "Error de conexión con Supabase.";
+        const msg = (data && (data.message || data.error || data.details)) ?
+          (data.message || data.error || data.details) : "Error de conexión con Supabase.";
         throw new Error(msg);
       }
       return data;
     }
 
     function setBtnLoading(btnId, textId, spinnerId, isLoading, loadingText, normalText){
-      el(btnId).disabled = isLoading;
-      el(spinnerId).classList.toggle("d-none", !isLoading);
-      el(textId).textContent = isLoading ? loadingText : normalText;
+      const btn = el(btnId);
+      if(btn) btn.disabled = isLoading;
+      const spin = el(spinnerId);
+      if(spin) spin.classList.toggle("d-none", !isLoading);
+      const txt = el(textId);
+      if(txt) txt.textContent = isLoading ? loadingText : normalText;
     }
 
     function sanitizeDigits(v){ return (v || "").replace(/\D/g, ""); }
@@ -354,16 +351,16 @@
     }
 
     /***********************
-     * PAGINATION
+     * PAGINATION & SEARCH
      ***********************/
     let pageOffset = 0;
     const PAGE_LIMIT = 50;
-    let lastFetchedCount = 0;
+    let lastFetchedCount = 0; // Cantidad REAL traída de BD, no la filtrada
 
     async function search(){
       hideAlert("alert_filters");
       hideAlert("alert_results");
-
+      
       const { token } = getSession();
       const ok = await touchSession(true);
       if (!ok) return logoutAndGoLogin();
@@ -375,31 +372,48 @@
       const expediente = sanitizeDigits(el("expediente").value).slice(0, 30) || null;
       const deliveryNo = Number(sanitizeDigits(el("delivery_no").value)) || null;
 
-      // Nota: p_created_by es UUID. Para MVP filtramos por nombre local (created_by_name)
-      const rows = await callRpc("rpc_dispatch_search", {
-        p_session_token: token,
-        p_date_from: fromIso,
-        p_date_to: toIso,
-        p_status: status,
-        p_expediente: expediente,
-        p_delivery_no: deliveryNo,
-        p_created_by: null,
-        p_limit: PAGE_LIMIT,
-        p_offset: pageOffset
-      });
+      // Nota: p_created_by es UUID en BD.
+      // Para MVP filtramos por nombre local (created_by_name) DESPUÉS del fetch.
+      try {
+        setBtnLoading("btn_search","btn_search_text","btn_search_spinner", true, "Buscando…", "Buscar");
+        
+        const rows = await callRpc("rpc_dispatch_search", {
+            p_session_token: token,
+            p_date_from: fromIso,
+            p_date_to: toIso,
+            p_status: status,
+            p_expediente: expediente,
+            p_delivery_no: deliveryNo,
+            p_created_by: null,
+            p_limit: PAGE_LIMIT,
+            p_offset: pageOffset
+        });
 
-      const nameFilter = (el("created_by_name").value || "").trim().toLowerCase();
-      let filtered = Array.isArray(rows) ? rows : [];
-      if (nameFilter){
-        filtered = filtered.filter(r => String(r.created_by_name || "").toLowerCase().includes(nameFilter));
+        // 1. Guardamos cuántos trajo realmente la BD para la paginación
+        lastFetchedCount = Array.isArray(rows) ? rows.length : 0;
+
+        // 2. Filtramos localmente por nombre
+        const nameFilter = (el("created_by_name").value || "").trim().toLowerCase();
+        let filtered = Array.isArray(rows) ? rows : [];
+        
+        if (nameFilter){
+            filtered = filtered.filter(r => String(r.created_by_name || "").toLowerCase().includes(nameFilter));
+        }
+
+        renderResults(filtered);
+
+        // 3. Control de botones
+        el("btn_prev").disabled = (pageOffset <= 0);
+        
+        // CORRECCIÓN CRÍTICA: Deshabilitar "Siguiente" basado en lo que trajo BD, no en lo filtrado.
+        // Si BD trajo 50, puede haber más en la sig página, aunque el filtro local muestre 0.
+        el("btn_next").disabled = (lastFetchedCount < PAGE_LIMIT);
+
+      } catch(err){
+          showAlert("alert_results", err.message || "No se pudieron cargar resultados.");
+      } finally {
+          setBtnLoading("btn_search","btn_search_text","btn_search_spinner", false, "Buscando…", "Buscar");
       }
-
-      lastFetchedCount = filtered.length;
-      renderResults(filtered);
-
-      el("btn_prev").disabled = (pageOffset <= 0);
-      // si devolvió menos del límite, ya no hay siguiente
-      el("btn_next").disabled = (lastFetchedCount < PAGE_LIMIT);
     }
 
     function renderResults(rows){
@@ -409,7 +423,7 @@
       body.innerHTML = "";
 
       if (!rows.length){
-        body.innerHTML = `<tr><td colspan="7" class="text-center text-muted py-4">Sin resultados.</td></tr>`;
+        body.innerHTML = `<tr><td colspan="7" class="text-center text-muted py-4">Sin resultados (con los filtros actuales).</td></tr>`;
         return;
       }
 
@@ -458,46 +472,50 @@
       const ok = await touchSession(true);
       if (!ok) return logoutAndGoLogin();
 
-      const rows = await callRpc("rpc_dispatch_get_by_delivery_no", { p_session_token: token, p_delivery_no: Number(deliveryNo) });
-      if (!Array.isArray(rows) || rows.length === 0){
-        showAlert("alert_results", "No se pudo abrir el detalle.");
-        return;
+      try {
+        const rows = await callRpc("rpc_dispatch_get_by_delivery_no", { p_session_token: token, p_delivery_no: Number(deliveryNo) });
+        if (!Array.isArray(rows) || rows.length === 0){
+            showAlert("alert_results", "No se pudo abrir el detalle.");
+            return;
+        }
+
+        const header = rows[0].header || {};
+        const items = Array.isArray(rows[0].items) ? rows[0].items : [];
+
+        el("m_delivery").textContent = header.delivery_no ? `#${header.delivery_no}` : "—";
+        el("m_exp").textContent = header.expediente || "—";
+        setModalStatus(header.status);
+
+        el("m_units").textContent = String(header.total_units ?? 0);
+        el("m_items").textContent = String(header.items_count ?? items.length ?? 0);
+        el("m_dispatcher").textContent = header.created_by_name || "—";
+        el("m_confirmed_at").textContent = header.confirmed_at ? fmtTime(header.confirmed_at) : "—";
+        el("m_validated_at").textContent = header.validated_at ? fmtTime(header.validated_at) : "—";
+        el("m_observed_at").textContent = header.observed_at ? fmtTime(header.observed_at) : "—";
+
+        const tb = el("m_items_body");
+        tb.innerHTML = "";
+        items.forEach(it => {
+            const tr = document.createElement("tr");
+            tr.innerHTML = `
+            <td>
+                <div class="fw-semibold">${escapeHtml(it.product_name || "—")}</div>
+                <div class="small text-muted mono">${escapeHtml(it.barcode || "")}</div>
+            </td>
+            <td class="text-center fw-semibold">${Number(it.qty || 0)}</td>
+            `;
+            tb.appendChild(tr);
+        });
+
+        if (header.observation_note){
+            el("m_note_block").textContent = `Observación: ${header.observation_note}`;
+            el("m_note_block").classList.remove("d-none");
+        }
+
+        bootstrap.Modal.getOrCreateInstance(el("modal_detail")).show();
+      } catch(e) {
+         showAlert("alert_results", "Error cargando detalle.");
       }
-
-      const header = rows[0].header || {};
-      const items = Array.isArray(rows[0].items) ? rows[0].items : [];
-
-      el("m_delivery").textContent = header.delivery_no ? `#${header.delivery_no}` : "—";
-      el("m_exp").textContent = header.expediente || "—";
-      setModalStatus(header.status);
-
-      el("m_units").textContent = String(header.total_units ?? 0);
-      el("m_items").textContent = String(header.items_count ?? items.length ?? 0);
-      el("m_dispatcher").textContent = header.created_by_name || "—";
-      el("m_confirmed_at").textContent = header.confirmed_at ? fmtTime(header.confirmed_at) : "—";
-      el("m_validated_at").textContent = header.validated_at ? fmtTime(header.validated_at) : "—";
-      el("m_observed_at").textContent = header.observed_at ? fmtTime(header.observed_at) : "—";
-
-      const tb = el("m_items_body");
-      tb.innerHTML = "";
-      items.forEach(it => {
-        const tr = document.createElement("tr");
-        tr.innerHTML = `
-          <td>
-            <div class="fw-semibold">${escapeHtml(it.product_name || "—")}</div>
-            <div class="small text-muted mono">${escapeHtml(it.barcode || "")}</div>
-          </td>
-          <td class="text-center fw-semibold">${Number(it.qty || 0)}</td>
-        `;
-        tb.appendChild(tr);
-      });
-
-      if (header.observation_note){
-        el("m_note_block").textContent = `Observación: ${header.observation_note}`;
-        el("m_note_block").classList.remove("d-none");
-      }
-
-      bootstrap.Modal.getOrCreateInstance(el("modal_detail")).show();
     }
 
     /***********************
@@ -530,9 +548,8 @@
       const s = getSession();
       if (!s.token) return window.location.href = ROUTES.login;
 
-      // Role gate: solo admin (o si quieres permitir cashier también, lo cambiamos)
+      // Role gate
       if (s.role !== "admin"){
-        // redirigir según rol
         if (s.role === "dispatch") return window.location.href = ROUTES.dispatch;
         if (s.role === "cashier") return window.location.href = ROUTES.cashier;
         return window.location.href = ROUTES.login;
@@ -548,21 +565,22 @@
 
       el("expediente").addEventListener("input", (e) => e.target.value = sanitizeDigits(e.target.value).slice(0, 30));
       el("delivery_no").addEventListener("input", (e) => e.target.value = sanitizeDigits(e.target.value).slice(0, 12));
-
-      el("btn_today").addEventListener("click", () => setDefaultDatesToday());
-      el("btn_7d").addEventListener("click", () => setDefaultDatesLast7());
+      
+      // FIX: Ahora disparan búsqueda automática
+      el("btn_today").addEventListener("click", async () => { 
+        setDefaultDatesToday(); 
+        pageOffset = 0;
+        await search();
+      });
+      el("btn_7d").addEventListener("click", async () => { 
+        setDefaultDatesLast7(); 
+        pageOffset = 0;
+        await search();
+      });
 
       el("btn_search").addEventListener("click", async () => {
-        try{
-          setLastActivity();
-          setBtnLoading("btn_search","btn_search_text","btn_search_spinner", true, "Buscando…", "Buscar");
-          pageOffset = 0;
-          await search();
-        } catch(err){
-          showAlert("alert_results", err.message || "No se pudieron cargar resultados.");
-        } finally {
-          setBtnLoading("btn_search","btn_search_text","btn_search_spinner", false, "Buscando…", "Buscar");
-        }
+        pageOffset = 0;
+        await search();
       });
 
       el("btn_prev").addEventListener("click", async () => {
@@ -572,7 +590,7 @@
       });
 
       el("btn_next").addEventListener("click", async () => {
-        if (lastFetchedCount < PAGE_LIMIT) return;
+        if (lastFetchedCount < PAGE_LIMIT) return; // Validación correcta
         pageOffset += PAGE_LIMIT;
         await search();
       });
