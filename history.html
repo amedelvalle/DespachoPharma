@@ -123,8 +123,11 @@
               <div class="text-muted small">Click en “Ver” para abrir el detalle.</div>
             </div>
             <div class="text-end">
-              <div class="text-muted small">Total (en vista)</div>
-              <div class="fw-semibold"><span id="count_results">0</span> registros</div>
+              <div class="text-muted small">Resumen (Vista actual)</div>
+              <div>
+                <span id="count_results" class="fw-semibold">0</span> regs | 
+                <span class="fw-semibold text-primary"><span id="sum_units">0</span> Unds</span>
+              </div>
             </div>
           </div>
 
@@ -372,8 +375,6 @@
       const expediente = sanitizeDigits(el("expediente").value).slice(0, 30) || null;
       const deliveryNo = Number(sanitizeDigits(el("delivery_no").value)) || null;
 
-      // Nota: p_created_by es UUID en BD.
-      // Para MVP filtramos por nombre local (created_by_name) DESPUÉS del fetch.
       try {
         setBtnLoading("btn_search","btn_search_text","btn_search_spinner", true, "Buscando…", "Buscar");
         
@@ -404,9 +405,7 @@
 
         // 3. Control de botones
         el("btn_prev").disabled = (pageOffset <= 0);
-        
-        // CORRECCIÓN CRÍTICA: Deshabilitar "Siguiente" basado en lo que trajo BD, no en lo filtrado.
-        // Si BD trajo 50, puede haber más en la sig página, aunque el filtro local muestre 0.
+        // Validamos contra las filas crudas de la BD
         el("btn_next").disabled = (lastFetchedCount < PAGE_LIMIT);
 
       } catch(err){
@@ -418,6 +417,11 @@
 
     function renderResults(rows){
       el("count_results").textContent = String(rows.length);
+
+      // AQUI ESTÁ EL CALCULO DE LA SUMA
+      const totalUnits = rows.reduce((acc, r) => acc + (Number(r.total_units) || 0), 0);
+      const sumSpan = el("sum_units");
+      if(sumSpan) sumSpan.textContent = String(totalUnits);
 
       const body = el("results_body");
       body.innerHTML = "";
@@ -566,7 +570,7 @@
       el("expediente").addEventListener("input", (e) => e.target.value = sanitizeDigits(e.target.value).slice(0, 30));
       el("delivery_no").addEventListener("input", (e) => e.target.value = sanitizeDigits(e.target.value).slice(0, 12));
       
-      // FIX: Ahora disparan búsqueda automática
+      // Auto-search para botones
       el("btn_today").addEventListener("click", async () => { 
         setDefaultDatesToday(); 
         pageOffset = 0;
@@ -590,7 +594,7 @@
       });
 
       el("btn_next").addEventListener("click", async () => {
-        if (lastFetchedCount < PAGE_LIMIT) return; // Validación correcta
+        if (lastFetchedCount < PAGE_LIMIT) return;
         pageOffset += PAGE_LIMIT;
         await search();
       });
