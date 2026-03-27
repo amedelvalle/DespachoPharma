@@ -205,11 +205,42 @@
               <thead class="table-light">
                 <tr>
                   <th>Producto</th>
-                  <th class="text-center">Cantidad</th>
+                  <th class="text-center" style="width:90px">Cantidad</th>
+                  <th id="m_col_action" class="text-end d-none" style="width:120px">Ajuste</th>
                 </tr>
               </thead>
               <tbody id="m_items_body"></tbody>
             </table>
+          </div>
+
+          <!-- Mini-form de ajuste (aparece inline al hacer click en editar) -->
+          <div id="m_adjust_section" class="d-none mt-2 p-3 border rounded">
+            <div id="alert_adjust" class="alert alert-danger d-none mb-2"></div>
+            <div id="alert_adjust_ok" class="alert alert-success d-none mb-2"></div>
+            <div class="d-flex align-items-center gap-2 mb-2">
+              <span class="small text-muted">Ajustando:</span>
+              <span id="adj_product" class="fw-semibold small">—</span>
+              <span class="small text-muted ms-2">Actual:</span>
+              <span id="adj_old_qty" class="fw-semibold small">—</span>
+            </div>
+            <div class="row g-2 align-items-end">
+              <div class="col-auto">
+                <label class="form-label small" for="adj_new_qty">Nueva cantidad</label>
+                <input id="adj_new_qty" type="number" class="form-control form-control-sm mono" min="0" style="width:80px" />
+                <div class="form-text">0 = eliminar item</div>
+              </div>
+              <div class="col">
+                <label class="form-label small" for="adj_reason">Motivo <span class="text-danger">*</span></label>
+                <input id="adj_reason" class="form-control form-control-sm" maxlength="500" placeholder="Ej: Paciente devolvió 1 unidad" />
+              </div>
+              <div class="col-auto d-flex gap-1">
+                <button id="btn_adj_save" class="btn btn-primary btn-sm">
+                  <span id="btn_adj_text">Guardar</span>
+                  <span id="btn_adj_spinner" class="spinner-border spinner-border-sm ms-1 d-none"></span>
+                </button>
+                <button id="btn_adj_cancel" class="btn btn-outline-secondary btn-sm">Cancelar</button>
+              </div>
+            </div>
           </div>
 
           <div id="m_note_block" class="alert alert-warning d-none mt-3 mb-0"></div>
@@ -498,8 +529,11 @@
 
     /***********************
      * VOID (Anulación admin)
+     * ADJUST (Ajuste parcial)
      ***********************/
-    let currentDispatchId = null; // se asigna al abrir el modal
+    let currentDispatchId = null;
+    let currentDeliveryNo = null;
+    let currentAdjustItemId = null;
 
     async function openDetailByDeliveryNo(deliveryNo){
       hideAlert("alert_modal");
@@ -542,6 +576,14 @@
 
         const tb = el("m_items_body");
         tb.innerHTML = "";
+        const isAdmin = getSession().role === 'admin';
+        const canEdit = isAdmin && header.status !== 'voided';
+
+        // Mostrar/ocultar columna de acción
+        el("m_col_action").classList.toggle("d-none", !canEdit);
+        // Ocultar sección de ajuste al abrir
+        el("m_adjust_section").classList.add("d-none");
+
         items.forEach(it => {
             const tr = document.createElement("tr");
             tr.innerHTML = `
@@ -550,17 +592,36 @@
                 <div class="small text-muted mono">${escapeHtml(it.barcode || "")}</div>
             </td>
             <td class="text-center fw-semibold">${Number(it.qty || 0)}</td>
+            ${canEdit ? `<td class="text-end">
+                <button class="btn btn-outline-warning btn-sm py-0 px-1" data-adj-item="${escapeHtml(it.id || '')}" data-adj-name="${escapeHtml(it.product_name || '')}" data-adj-qty="${Number(it.qty || 0)}" title="Ajustar cantidad">
+                  ✎
+                </button>
+            </td>` : ''}
             `;
             tb.appendChild(tr);
         });
+
+        // Wiring botones de ajuste
+        if (canEdit) {
+          tb.querySelectorAll('button[data-adj-item]').forEach(btn => {
+            btn.addEventListener("click", () => {
+              openAdjustForm(
+                btn.getAttribute("data-adj-item"),
+                btn.getAttribute("data-adj-name"),
+                Number(btn.getAttribute("data-adj-qty"))
+              );
+            });
+          });
+        }
 
         if (header.observation_note){
             el("m_note_block").textContent = `Observación: ${header.observation_note}`;
             el("m_note_block").classList.remove("d-none");
         }
 
-        // ===== Lógica de anulación =====
+        // ===== Lógica de anulación y ajuste =====
         currentDispatchId = header.id || null;
+        currentDeliveryNo = header.delivery_no || null;
 
         if (header.status === 'voided') {
           // Mostrar info de anulación
@@ -637,6 +698,91 @@
         showAlert("alert_void", err.message || "No se pudo anular el despacho.");
       } finally {
         setBtnLoading("btn_void", "btn_void_text", "btn_void_spinner", false, "Anulando…", "Anular despacho");
+      }
+    }
+
+    /***********************
+     * ADJUST (Ajuste parcial de item)
+     ***********************/
+    function openAdjustForm(itemId, productName, currentQty) {
+      hideAlert("alert_adjust");
+      hideAlert("alert_adjust_ok");
+      currentAdjustItemId = itemId;
+      el("adj_product").textContent = productName;
+      el("adj_old_qty").textContent = String(currentQty);
+      el("adj_new_qty").value = currentQty;
+      el("adj_reason").value = "";
+      el("m_adjust_section").classList.remove("d-none");
+      el("adj_new_qty").focus();
+      el("adj_new_qty").select();
+    }
+
+    function closeAdjustForm() {
+      currentAdjustItemId = null;
+      el("m_adjust_section").classList.add("d-none");
+      hideAlert("alert_adjust");
+      hideAlert("alert_adjust_ok");
+    }
+
+    async function saveAdjust() {
+      hideAlert("alert_adjust");
+      hideAlert("alert_adjust_ok");
+
+      if (!currentDispatchId || !currentAdjustItemId) {
+        showAlert("alert_adjust", "Error interno: no se identificó el despacho o item.");
+        return;
+      }
+
+      const newQty = parseInt(el("adj_new_qty").value, 10);
+      if (isNaN(newQty) || newQty < 0) {
+        showAlert("alert_adjust", "La cantidad debe ser 0 o mayor.");
+        el("adj_new_qty").focus();
+        return;
+      }
+
+      const reason = (el("adj_reason").value || "").trim();
+      if (!reason) {
+        showAlert("alert_adjust", "Debe indicar un motivo para el ajuste.");
+        el("adj_reason").focus();
+        return;
+      }
+
+      const actionText = newQty === 0 ? "ELIMINAR este item del despacho" : `cambiar la cantidad de ${el("adj_old_qty").textContent} a ${newQty}`;
+      if (!confirm(`¿Está seguro de ${actionText}?\n\nProducto: ${el("adj_product").textContent}\nMotivo: ${reason}`)) {
+        return;
+      }
+
+      const ok = await touchSession(true);
+      if (!ok) return logoutAndGoLogin();
+
+      const { token } = getSession();
+
+      try {
+        setBtnLoading("btn_adj_save", "btn_adj_text", "btn_adj_spinner", true, "Guardando…", "Guardar");
+
+        await callRpc("rpc_dispatch_adjust_item", {
+          p_session_token: token,
+          p_dispatch_id:   currentDispatchId,
+          p_item_id:       currentAdjustItemId,
+          p_new_qty:       newQty,
+          p_reason:        reason
+        });
+
+        showAlert("alert_adjust_ok", newQty === 0 ? "Item eliminado." : "Cantidad ajustada.");
+
+        // Refrescar el modal completo para ver cambios
+        closeAdjustForm();
+        if (currentDeliveryNo) {
+          await openDetailByDeliveryNo(currentDeliveryNo);
+        }
+
+        // Refrescar tabla de resultados
+        try { await search(); } catch(_){}
+
+      } catch(err) {
+        showAlert("alert_adjust", err.message || "No se pudo ajustar el item.");
+      } finally {
+        setBtnLoading("btn_adj_save", "btn_adj_text", "btn_adj_spinner", false, "Guardando…", "Guardar");
       }
     }
 
@@ -724,6 +870,10 @@
 
       // Botón anular despacho (en el modal)
       el("btn_void").addEventListener("click", voidDispatch);
+
+      // Botones ajuste de items (en el modal)
+      el("btn_adj_save").addEventListener("click", saveAdjust);
+      el("btn_adj_cancel").addEventListener("click", closeAdjustForm);
 
       // auto-search inicial
       try{
