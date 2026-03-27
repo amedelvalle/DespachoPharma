@@ -213,6 +213,36 @@
           </div>
 
           <div id="m_note_block" class="alert alert-warning d-none mt-3 mb-0"></div>
+
+          <!-- ===== SECCIÓN ANULAR (solo visible para admin, oculta si ya está voided) ===== -->
+          <div id="m_void_section" class="d-none mt-3">
+            <hr>
+            <div class="fw-semibold text-danger mb-2">Anular despacho</div>
+            <div class="text-muted small mb-2">Esta acción cambiará el estado a <strong>Voided</strong>. No se puede deshacer.</div>
+            <div id="alert_void" class="alert alert-danger d-none mb-2"></div>
+            <div id="alert_void_ok" class="alert alert-success d-none mb-2"></div>
+            <div class="mb-2">
+              <label class="form-label" for="void_reason">Motivo de anulación <span class="text-danger">*</span></label>
+              <textarea id="void_reason" class="form-control" rows="2" maxlength="500" placeholder="Ej: Error de digitación, duplicado, paciente incorrecto…"></textarea>
+            </div>
+            <button id="btn_void" class="btn btn-danger btn-sm">
+              <span id="btn_void_text">Anular despacho</span>
+              <span id="btn_void_spinner" class="spinner-border spinner-border-sm ms-2 d-none"></span>
+            </button>
+          </div>
+
+          <!-- ===== INFO ANULACIÓN (visible si ya fue anulado) ===== -->
+          <div id="m_void_info" class="d-none mt-3">
+            <hr>
+            <div class="alert alert-danger mb-0">
+              <div class="fw-semibold mb-1">Despacho anulado</div>
+              <div class="small">
+                <span class="me-3">Por: <span id="m_voided_by" class="fw-semibold">—</span></span>
+                <span class="me-3">Fecha: <span id="m_voided_at" class="fw-semibold">—</span></span>
+              </div>
+              <div class="small mt-1">Motivo: <span id="m_void_reason" class="fw-semibold">—</span></div>
+            </div>
+          </div>
         </div>
 
         <div class="modal-footer">
@@ -466,11 +496,24 @@
       else { b.classList.add("text-bg-light","border"); b.textContent = status || "—"; }
     }
 
+    /***********************
+     * VOID (Anulación admin)
+     ***********************/
+    let currentDispatchId = null; // se asigna al abrir el modal
+
     async function openDetailByDeliveryNo(deliveryNo){
       hideAlert("alert_modal");
       el("m_items_body").innerHTML = "";
       el("m_note_block").classList.add("d-none");
       el("m_note_block").textContent = "";
+
+      // Reset void section
+      currentDispatchId = null;
+      el("m_void_section").classList.add("d-none");
+      el("m_void_info").classList.add("d-none");
+      el("void_reason").value = "";
+      hideAlert("alert_void");
+      hideAlert("alert_void_ok");
 
       const { token } = getSession();
       const ok = await touchSession(true);
@@ -516,9 +559,84 @@
             el("m_note_block").classList.remove("d-none");
         }
 
+        // ===== Lógica de anulación =====
+        currentDispatchId = header.id || null;
+
+        if (header.status === 'voided') {
+          // Mostrar info de anulación
+          el("m_void_info").classList.remove("d-none");
+          el("m_voided_by").textContent = header.voided_by_name || header.voided_by || "—";
+          el("m_voided_at").textContent = header.voided_at ? fmtTime(header.voided_at) : "—";
+          el("m_void_reason").textContent = header.void_reason || "Sin motivo registrado";
+          el("m_void_section").classList.add("d-none");
+        } else {
+          // Mostrar botón de anular (solo admin)
+          el("m_void_info").classList.add("d-none");
+          const { role } = getSession();
+          if (role === 'admin') {
+            el("m_void_section").classList.remove("d-none");
+          }
+        }
+
         bootstrap.Modal.getOrCreateInstance(el("modal_detail")).show();
       } catch(e) {
          showAlert("alert_results", "Error cargando detalle.");
+      }
+    }
+
+    async function voidDispatch(){
+      hideAlert("alert_void");
+      hideAlert("alert_void_ok");
+
+      if (!currentDispatchId) {
+        showAlert("alert_void", "Error interno: no se identificó el despacho.");
+        return;
+      }
+
+      const reason = (el("void_reason").value || "").trim();
+      if (!reason) {
+        showAlert("alert_void", "Debe indicar un motivo para la anulación.");
+        el("void_reason").focus();
+        return;
+      }
+
+      if (!confirm("¿Está seguro de ANULAR este despacho?\n\nMotivo: " + reason + "\n\nEsta acción no se puede deshacer.")) {
+        return;
+      }
+
+      const ok = await touchSession(true);
+      if (!ok) return logoutAndGoLogin();
+
+      const { token } = getSession();
+
+      try {
+        setBtnLoading("btn_void", "btn_void_text", "btn_void_spinner", true, "Anulando…", "Anular despacho");
+
+        await callRpc("rpc_dispatch_void", {
+          p_session_token: token,
+          p_dispatch_id:   currentDispatchId,
+          p_reason:        reason
+        });
+
+        // Éxito: actualizar UI del modal
+        showAlert("alert_void_ok", "Despacho anulado exitosamente.");
+        el("m_void_section").classList.add("d-none");
+        setModalStatus("voided");
+
+        // Mostrar info de anulación
+        el("m_void_info").classList.remove("d-none");
+        const { name } = getSession();
+        el("m_voided_by").textContent = name || "Admin";
+        el("m_voided_at").textContent = fmtTime(new Date().toISOString());
+        el("m_void_reason").textContent = reason;
+
+        // Refrescar la tabla de resultados de fondo
+        try { await search(); } catch(_){}
+
+      } catch(err) {
+        showAlert("alert_void", err.message || "No se pudo anular el despacho.");
+      } finally {
+        setBtnLoading("btn_void", "btn_void_text", "btn_void_spinner", false, "Anulando…", "Anular despacho");
       }
     }
 
@@ -603,6 +721,9 @@
         if (!confirm("¿Cerrar sesión?")) return;
         await logoutAndGoLogin();
       });
+
+      // Botón anular despacho (en el modal)
+      el("btn_void").addEventListener("click", voidDispatch);
 
       // auto-search inicial
       try{
