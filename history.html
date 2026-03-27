@@ -620,7 +620,7 @@
         }
 
         // ===== Lógica de anulación y ajuste =====
-        currentDispatchId = header.id || null;
+        currentDispatchId = header.dispatch_id || header.id || null;
         currentDeliveryNo = header.delivery_no || null;
 
         if (header.status === 'voided') {
