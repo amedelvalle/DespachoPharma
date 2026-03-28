@@ -125,10 +125,24 @@
             <div class="text-end">
               <div class="text-muted small">Resumen (Vista actual)</div>
               <div>
-                <span id="count_results" class="fw-semibold">0</span> regs | 
-                <span class="fw-semibold text-primary"><span id="sum_units">0</span> Unds</span>
+                <span id="count_results" class="fw-semibold">0</span> regs |
+                <span class="fw-semibold text-primary"><span id="sum_units">0</span> Total</span> |
+                <span class="fw-semibold text-success"><span id="sum_active">0</span> Activas</span> |
+                <span class="fw-semibold text-danger"><span id="sum_voided">0</span> Anuladas</span>
               </div>
             </div>
+          </div>
+
+          <!-- Botones de exportación -->
+          <div class="d-flex gap-2 mt-2">
+            <button id="btn_export_csv" class="btn btn-outline-secondary btn-sm" disabled>
+              <span id="btn_csv_text">Exportar CSV</span>
+              <span id="btn_csv_spinner" class="spinner-border spinner-border-sm ms-1 d-none"></span>
+            </button>
+            <button id="btn_export_pdf" class="btn btn-outline-secondary btn-sm" disabled>
+              <span id="btn_pdf_text">Exportar PDF</span>
+              <span id="btn_pdf_spinner" class="spinner-border spinner-border-sm ms-1 d-none"></span>
+            </button>
           </div>
 
           <div id="alert_results" class="alert alert-danger d-none mt-3 mb-0" role="alert"></div>
@@ -476,13 +490,24 @@
       }
     }
 
+    let lastRenderedRows = []; // almacena resultados para exportación
+
     function renderResults(rows){
+      lastRenderedRows = rows; // guardar para export
       el("count_results").textContent = String(rows.length);
 
-      // AQUI ESTÁ EL CALCULO DE LA SUMA
+      // Desglose de unidades
       const totalUnits = rows.reduce((acc, r) => acc + (Number(r.total_units) || 0), 0);
-      const sumSpan = el("sum_units");
-      if(sumSpan) sumSpan.textContent = String(totalUnits);
+      const activeUnits = rows.filter(r => r.status !== 'voided').reduce((acc, r) => acc + (Number(r.total_units) || 0), 0);
+      const voidedUnits = rows.filter(r => r.status === 'voided').reduce((acc, r) => acc + (Number(r.total_units) || 0), 0);
+
+      el("sum_units").textContent = String(totalUnits);
+      el("sum_active").textContent = String(activeUnits);
+      el("sum_voided").textContent = String(voidedUnits);
+
+      // Habilitar/deshabilitar botones de exportación
+      el("btn_export_csv").disabled = (rows.length === 0);
+      el("btn_export_pdf").disabled = (rows.length === 0);
 
       const body = el("results_body");
       body.innerHTML = "";
@@ -787,6 +812,211 @@
     }
 
     /***********************
+     * EXPORT (CSV + PDF con detalle)
+     ***********************/
+
+    // Obtener detalle de items de un despacho
+    async function fetchDispatchDetail(deliveryNo) {
+      const { token } = getSession();
+      try {
+        const rows = await callRpc("rpc_dispatch_get_by_delivery_no", {
+          p_session_token: token,
+          p_delivery_no: Number(deliveryNo)
+        });
+        if (!Array.isArray(rows) || rows.length === 0) return [];
+        return Array.isArray(rows[0].items) ? rows[0].items : [];
+      } catch(_) {
+        return [];
+      }
+    }
+
+    // ---- CSV ----
+    async function exportCSV() {
+      if (lastRenderedRows.length === 0) return;
+
+      try {
+        setBtnLoading("btn_export_csv", "btn_csv_text", "btn_csv_spinner", true, "Generando…", "Exportar CSV");
+
+        const csvLines = [];
+        csvLines.push("Entrega,Expediente,Fecha,Estado,Despachador,Barcode,Producto,Cantidad");
+
+        for (const r of lastRenderedRows) {
+          const items = await fetchDispatchDetail(r.delivery_no);
+          if (items.length === 0) {
+            csvLines.push([
+              r.delivery_no || "", r.expediente || "",
+              fmtTime(r.confirmed_at || r.created_at),
+              r.status || "", r.created_by_name || "",
+              "", "", r.total_units || 0
+            ].map(csvEscape).join(","));
+          } else {
+            items.forEach(it => {
+              csvLines.push([
+                r.delivery_no || "", r.expediente || "",
+                fmtTime(r.confirmed_at || r.created_at),
+                r.status || "", r.created_by_name || "",
+                it.barcode || "", it.product_name || "", it.qty || 0
+              ].map(csvEscape).join(","));
+            });
+          }
+        }
+
+        const bom = "\uFEFF";
+        const blob = new Blob([bom + csvLines.join("\n")], { type: "text/csv;charset=utf-8;" });
+        downloadBlob(blob, `despachos_${toYmd(new Date())}.csv`);
+
+      } catch(err) {
+        showAlert("alert_results", "Error generando CSV: " + (err.message || ""));
+      } finally {
+        setBtnLoading("btn_export_csv", "btn_csv_text", "btn_csv_spinner", false, "Generando…", "Exportar CSV");
+      }
+    }
+
+    function csvEscape(val) {
+      const s = String(val ?? "");
+      if (s.includes(",") || s.includes('"') || s.includes("\n")) {
+        return '"' + s.replace(/"/g, '""') + '"';
+      }
+      return s;
+    }
+
+    // ---- PDF ----
+    async function exportPDF() {
+      if (lastRenderedRows.length === 0) return;
+
+      try {
+        setBtnLoading("btn_export_pdf", "btn_pdf_text", "btn_pdf_spinner", true, "Generando…", "Exportar PDF");
+
+        // Calcular desglose
+        const totalUnits = lastRenderedRows.reduce((a, r) => a + (Number(r.total_units) || 0), 0);
+        const activeUnits = lastRenderedRows.filter(r => r.status !== 'voided').reduce((a, r) => a + (Number(r.total_units) || 0), 0);
+        const voidedUnits = lastRenderedRows.filter(r => r.status === 'voided').reduce((a, r) => a + (Number(r.total_units) || 0), 0);
+
+        // Cargar detalle de cada despacho
+        const dispatches = [];
+        for (const r of lastRenderedRows) {
+          const items = await fetchDispatchDetail(r.delivery_no);
+          dispatches.push({ ...r, items });
+        }
+
+        // Construir HTML para el PDF
+        const html = buildPdfHtml(dispatches, {
+          totalUnits, activeUnits, voidedUnits,
+          dateFrom: el("date_from").value,
+          dateTo: el("date_to").value,
+          count: lastRenderedRows.length
+        });
+
+        // Abrir en nueva ventana para imprimir/guardar como PDF
+        const win = window.open("", "_blank");
+        win.document.write(html);
+        win.document.close();
+        win.focus();
+        setTimeout(() => win.print(), 600);
+
+      } catch(err) {
+        showAlert("alert_results", "Error generando PDF: " + (err.message || ""));
+      } finally {
+        setBtnLoading("btn_export_pdf", "btn_pdf_text", "btn_pdf_spinner", false, "Generando…", "Exportar PDF");
+      }
+    }
+
+    function buildPdfHtml(dispatches, summary) {
+      const statusLabel = (s) => {
+        if (s === 'confirmed') return '<span style="color:#2563eb">Confirmed</span>';
+        if (s === 'validated') return '<span style="color:#16a34a">Validated</span>';
+        if (s === 'observed') return '<span style="color:#ca8a04">Observed</span>';
+        if (s === 'voided') return '<span style="color:#dc2626">Voided</span>';
+        if (s === 'draft') return '<span style="color:#6b7280">Draft</span>';
+        return s || '—';
+      };
+
+      let rows = '';
+      dispatches.forEach(d => {
+        const itemCount = d.items ? d.items.length : 0;
+        const rowspan = Math.max(itemCount, 1);
+        const mainStyle = d.status === 'voided' ? 'color:#999;text-decoration:line-through;' : '';
+
+        if (itemCount === 0) {
+          rows += `<tr style="${mainStyle}">
+            <td>${d.delivery_no || '—'}</td>
+            <td>${escapeHtml(d.expediente || '')}</td>
+            <td>${fmtTime(d.confirmed_at || d.created_at)}</td>
+            <td>${statusLabel(d.status)}</td>
+            <td>${escapeHtml(d.created_by_name || '—')}</td>
+            <td>—</td><td>—</td><td>—</td>
+          </tr>`;
+        } else {
+          d.items.forEach((it, idx) => {
+            rows += '<tr style="' + mainStyle + '">';
+            if (idx === 0) {
+              rows += `
+                <td rowspan="${rowspan}">${d.delivery_no || '—'}</td>
+                <td rowspan="${rowspan}">${escapeHtml(d.expediente || '')}</td>
+                <td rowspan="${rowspan}">${fmtTime(d.confirmed_at || d.created_at)}</td>
+                <td rowspan="${rowspan}">${statusLabel(d.status)}</td>
+                <td rowspan="${rowspan}">${escapeHtml(d.created_by_name || '—')}</td>`;
+            }
+            rows += `
+              <td style="font-family:monospace;font-size:11px">${escapeHtml(it.barcode || '')}</td>
+              <td>${escapeHtml(it.product_name || '—')}</td>
+              <td style="text-align:center;font-weight:bold">${it.qty || 0}</td>
+            </tr>`;
+          });
+        }
+      });
+
+      return `<!DOCTYPE html><html><head><meta charset="utf-8">
+<title>Reporte DespachoPharma</title>
+<style>
+  @media print { @page { size: landscape; margin: 10mm; } }
+  body { font-family: Arial, sans-serif; font-size: 12px; color: #333; margin: 20px; }
+  h1 { font-size: 18px; margin-bottom: 4px; }
+  .subtitle { color: #666; font-size: 12px; margin-bottom: 16px; }
+  .summary { display: flex; gap: 24px; margin-bottom: 16px; padding: 8px 12px; background: #f8fafc; border-radius: 8px; }
+  .summary span { font-weight: bold; }
+  .s-total { color: #2563eb; }
+  .s-active { color: #16a34a; }
+  .s-voided { color: #dc2626; }
+  table { width: 100%; border-collapse: collapse; font-size: 11px; }
+  th { background: #f1f5f9; text-align: left; padding: 6px 8px; border-bottom: 2px solid #cbd5e1; font-size: 11px; }
+  td { padding: 5px 8px; border-bottom: 1px solid #e2e8f0; vertical-align: top; }
+  tr:hover { background: #f8fafc; }
+  .footer { margin-top: 20px; font-size: 10px; color: #999; text-align: center; }
+</style></head><body>
+<h1>DespachoPharma — Reporte de Despachos</h1>
+<div class="subtitle">Período: ${escapeHtml(summary.dateFrom || '—')} al ${escapeHtml(summary.dateTo || '—')} | Generado: ${fmtTime(new Date().toISOString())}</div>
+<div class="summary">
+  <div>Registros: <span>${summary.count}</span></div>
+  <div>Total: <span class="s-total">${summary.totalUnits} Unds</span></div>
+  <div>Activas: <span class="s-active">${summary.activeUnits} Unds</span></div>
+  <div>Anuladas: <span class="s-voided">${summary.voidedUnits} Unds</span></div>
+</div>
+<table>
+  <thead>
+    <tr>
+      <th>Entrega</th><th>Expediente</th><th>Fecha</th><th>Estado</th><th>Despachador</th>
+      <th>Barcode</th><th>Producto</th><th style="text-align:center">Cant.</th>
+    </tr>
+  </thead>
+  <tbody>${rows}</tbody>
+</table>
+<div class="footer">DespachoPharma — Reporte generado automáticamente. Los despachos anulados aparecen tachados.</div>
+</body></html>`;
+    }
+
+    function downloadBlob(blob, filename) {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
+
+    /***********************
      * IDLE LOGIC (30 min)
      ***********************/
     const IDLE_MINUTES = 30;
@@ -874,6 +1104,10 @@
       // Botones ajuste de items (en el modal)
       el("btn_adj_save").addEventListener("click", saveAdjust);
       el("btn_adj_cancel").addEventListener("click", closeAdjustForm);
+
+      // Botones de exportación
+      el("btn_export_csv").addEventListener("click", exportCSV);
+      el("btn_export_pdf").addEventListener("click", exportPDF);
 
       // auto-search inicial
       try{
